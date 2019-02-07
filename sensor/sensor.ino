@@ -101,17 +101,26 @@ void loop() {
   transmitTemperature(temp, 10.0);
 }
 
+// Transmits the given temperature and depth to the control unit
 void transmitTemperature(float temp, float depth) {
-  char packet[8];
-  memcpy(packet, (char*)(&temp), 4);
-  memcpy(packet+4, (char*)(&depth), 4);
+  // Pack the two float values into a single char array.
+  //
+  // This format reduces the amount of data that must be transmitted and
+  // reduces loss of precision when converting to a string.
+  //
+  // These will need to be unpacked the same way on the control unit:
+  // First 4 bytes: Water Temp
+  // Next 4 bytes: Water Depth
+  uint8_t packet[8];
+  memcpy(packet, (uint8_t*)(&temp), 4);
+  memcpy(packet+4, (uint8_t*)(&depth), 4);
   
   Serial.print("Sending Temp: ");
   Serial.print(*(float*)packet);
   Serial.print(" Depth: ");
   Serial.println(*(float*)(packet + 4));
 
-  if (rf69_manager.sendtoWait((uint8_t *)packet, strlen(packet), DEST_ADDRESS)) {
+  if (rf69_manager.sendtoWait((uint8_t *)packet, 8, DEST_ADDRESS)) {
     uint8_t len = sizeof(buf);
     uint8_t from;
     if (rf69_manager.recvfromAckTimeout(buf, &len, 2000, &from)) {
