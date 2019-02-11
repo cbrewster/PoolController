@@ -75,15 +75,13 @@ class ControllerStatus extends StatelessWidget {
         child: Column(children: [
       Container(
           width: double.infinity,
-          padding: EdgeInsets.only(top: 20, left: 10),
-          child: Text(
-            name,
-            style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
-          )),
-      Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
+          padding: EdgeInsets.only(top: 20, left: 10, right: 10),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.center, children: [
+            Text(
+              name,
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+            ),
+            Spacer(),
             Padding(
                 padding: EdgeInsets.all(5.0),
                 child: CustomPaint(
@@ -94,8 +92,8 @@ class ControllerStatus extends StatelessWidget {
             Text(
               enabled ? "ENABLED" : "DISABLED",
               style: TextStyle(fontWeight: FontWeight.bold),
-            )
-          ]),
+            ),
+          ])),
       Flex(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         direction: Axis.horizontal,
