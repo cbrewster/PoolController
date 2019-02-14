@@ -14,7 +14,7 @@
          FlutterApplication and put your custom class here. -->
     <application
         android:name="io.flutter.app.FlutterApplication"
-        android:label="pool_interface"
+        android:label="Pool Controller"
         android:icon="@mipmap/ic_launcher">
         <activity
             android:name=".MainActivity"

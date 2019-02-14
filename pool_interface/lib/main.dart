@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'indicator.dart';
+import 'dart:math';
+import 'dart:async';
 
 void main() => runApp(MyApp());
 
@@ -9,20 +11,30 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Pool Controller',
-      theme:
-          ThemeData(primarySwatch: Colors.blue, accentColor: Colors.blueAccent),
-      home: MyHomePage(title: 'Pool Controller Dashboard'),
+      theme: ThemeData(primarySwatch: Colors.blue),
+      home: DefaultTabController(
+        length: 2,
+        child: Scaffold(
+          appBar: AppBar(
+            bottom: TabBar(
+              tabs: <Widget>[
+                Tab(
+                  text: "Dashboard",
+                ),
+                Tab(
+                  text: "Schedule",
+                )
+              ],
+            ),
+            title: const Text("Pool Controller"),
+          ),
+          body: TabBarView(
+            children: <Widget>[Dashboard(), ScheduleWidget()],
+          ),
+        ),
+      ),
     );
   }
-}
-
-class MyHomePage extends StatefulWidget {
-  MyHomePage({Key key, this.title}) : super(key: key);
-
-  final String title;
-
-  @override
-  _MyHomePageState createState() => _MyHomePageState();
 }
 
 class DataDisplay extends StatelessWidget {
@@ -114,64 +126,187 @@ class ControllerStatus extends StatelessWidget {
   }
 }
 
-class _MyHomePageState extends State<MyHomePage> {
+class Dashboard extends StatefulWidget {
+  Dashboard({Key key}) : super(key: key);
+
+  @override
+  _DashboardState createState() => _DashboardState();
+}
+
+class _DashboardState extends State<Dashboard> {
   bool _pumpAuto = true;
   bool _pumpOn = true;
   bool _heaterAuto = true;
   bool _heaterOn = true;
+  int _thermostat = 75;
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-        appBar: AppBar(
-          title: Text(widget.title),
+    return Column(children: [
+      ControllerStatus(
+        auto: _pumpAuto,
+        enabled: _pumpOn,
+        name: "Water Pump",
+        onStatusChange: (value) {
+          setState(() {
+            _pumpOn = value;
+          });
+        },
+        onModeChange: (value) {
+          setState(() {
+            _pumpAuto = value;
+          });
+        },
+      ),
+      ControllerStatus(
+        auto: _heaterAuto,
+        enabled: _heaterOn,
+        name: "Water Heater",
+        onStatusChange: (value) {
+          setState(() {
+            _heaterOn = value;
+          });
+        },
+        onModeChange: (value) {
+          setState(() {
+            _heaterAuto = value;
+          });
+        },
+      ),
+      Flexible(
+          child: Container(
+              color: Theme.of(context).accentColor,
+              width: double.infinity,
+              margin: EdgeInsets.only(top: 5, bottom: 5),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text("Thermostat"),
+                    Padding(
+                        padding: EdgeInsets.only(left: 20, right: 20),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: <Widget>[
+                            RaisedButton(
+                              child: const Icon(Icons.remove),
+                              onPressed: _thermostat <= 70 || _heaterAuto
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _thermostat = max(_thermostat - 1, 70);
+                                      });
+                                    },
+                            ),
+                            Text(
+                              "$_thermostat ºF",
+                              style: TextStyle(
+                                fontSize: 40,
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            RaisedButton(
+                              child: const Icon(Icons.add),
+                              onPressed: _thermostat >= 84 || _heaterAuto
+                                  ? null
+                                  : () {
+                                      setState(() {
+                                        _thermostat = min(_thermostat + 1, 84);
+                                      });
+                                    },
+                            ),
+                          ],
+                        )),
+                  ]))),
+      Flexible(
+          child: DataDisplay(
+        label: "Water Temperature",
+        value: "68 ºF",
+      )),
+      Flexible(
+          child: DataDisplay(
+        label: "Air Temperature",
+        value: "72 ºF",
+      )),
+    ]);
+  }
+}
+
+class ScheduleWidget extends StatefulWidget {
+  @override
+  State<StatefulWidget> createState() => _ScheduleWidgetState();
+}
+
+class _ScheduleWidgetState extends State<ScheduleWidget> {
+  TimeOfDay _pumpOn;
+  TimeOfDay _pumpOff;
+
+  Future<Null> _selectPumpOnTime(BuildContext context) async {
+    final TimeOfDay picked = await showTimePicker(
+      context: context,
+      initialTime: _pumpOn ?? TimeOfDay.now(),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _pumpOn = picked;
+      });
+    }
+  }
+
+  Future<Null> _selectPumpOffTime(BuildContext context) async {
+    final TimeOfDay picked = await showTimePicker(
+      context: context,
+      initialTime: _pumpOff ?? TimeOfDay.now(),
+    );
+
+    if (picked != null) {
+      setState(() {
+        _pumpOff = picked;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Padding(
+            padding: EdgeInsets.all(10),
+            child: Text(
+              "Water Pump Schedule",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+            )),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            Text("Pump On:"),
+            Text(
+              _pumpOn == null ? "Not Set" : "${_pumpOn.format(context)}",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            RaisedButton(
+              child: const Text("Select Time"),
+              onPressed: () => _selectPumpOnTime(context),
+            )
+          ],
         ),
-        body: Column(children: [
-          ControllerStatus(
-            auto: _pumpAuto,
-            enabled: _pumpOn,
-            name: "Water Pump",
-            onStatusChange: (value) {
-              setState(() {
-                _pumpOn = value;
-              });
-            },
-            onModeChange: (value) {
-              setState(() {
-                _pumpAuto = value;
-              });
-            },
-          ),
-          ControllerStatus(
-            auto: _heaterAuto,
-            enabled: _heaterOn,
-            name: "Water Heater",
-            onStatusChange: (value) {
-              setState(() {
-                _heaterOn = value;
-              });
-            },
-            onModeChange: (value) {
-              setState(() {
-                _heaterAuto = value;
-              });
-            },
-          ),
-          Flexible(
-              child: DataDisplay(
-            label: "Water Temperature",
-            value: "68 ºF",
-          )),
-          Flexible(
-              child: DataDisplay(
-            label: "Air Temperature",
-            value: "72 ºF",
-          )),
-          Flexible(
-              child: DataDisplay(
-            label: "Water Depth",
-            value: "10 ft",
-          )),
-        ]));
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            Text("Pump Off:"),
+            Text(
+              _pumpOff == null ? "Not Set" : "${_pumpOff.format(context)}",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            RaisedButton(
+              child: const Text("Select Time"),
+              onPressed: () => _selectPumpOffTime(context),
+            )
+          ],
+        )
+      ],
+    );
   }
 }
