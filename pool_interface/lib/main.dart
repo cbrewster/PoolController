@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'indicator.dart';
+import 'package:pool_interface/indicator.dart';
+import 'package:pool_interface/search.dart';
 import 'dart:math';
 import 'dart:async';
 
@@ -12,26 +13,30 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Pool Controller',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: DefaultTabController(
-        length: 2,
-        child: Scaffold(
-          appBar: AppBar(
-            bottom: TabBar(
-              tabs: <Widget>[
-                Tab(
-                  text: "Dashboard",
-                ),
-                Tab(
-                  text: "Schedule",
-                )
-              ],
+      home: DefaultTabController(length: 2, child: PoolController()),
+    );
+  }
+}
+
+class PoolController extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        bottom: TabBar(
+          tabs: <Widget>[
+            Tab(
+              text: "Dashboard",
             ),
-            title: const Text("Pool Controller"),
-          ),
-          body: TabBarView(
-            children: <Widget>[Dashboard(), ScheduleWidget()],
-          ),
+            Tab(
+              text: "Schedule",
+            )
+          ],
         ),
+        title: const Text("Pool Controller"),
+      ),
+      body: TabBarView(
+        children: <Widget>[Dashboard(), ScheduleWidget()],
       ),
     );
   }
