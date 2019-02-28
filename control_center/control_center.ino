@@ -163,7 +163,7 @@ void setupBle()
     /* Add the Pool Controller characteristic */
     /* Chars ID for Measurement should be 1 */
     Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8270): "));
-    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8270, PROPERTIES=0x10, MIN_LEN=2, MAX_LEN=3, VALUE=00-40"), &pcWaterTempCharId);
+    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8270, PROPERTIES=0x10, MIN_LEN=2, MAX_LEN=2, VALUE=00-40"), &pcWaterTempCharId);
     if (!success)
     {
         error(F("Could not add HRM characteristic"));
