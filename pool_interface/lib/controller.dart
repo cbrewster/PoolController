@@ -7,6 +7,7 @@ class PoolInfo {
   PoolInfo({this.waterTemp});
 
   int waterTemp;
+  int airTemp;
 }
 
 class PoolController extends StatelessWidget {
@@ -234,7 +235,8 @@ class _DashboardState extends State<Dashboard> {
       Flexible(
           child: DataDisplay(
         label: "Air Temperature",
-        value: "72 ºF",
+        value:
+            "${widget.poolInfo.airTemp != null ? widget.poolInfo.airTemp : "?"} ºF",
       )),
     ]);
   }

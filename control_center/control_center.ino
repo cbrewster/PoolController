@@ -7,6 +7,11 @@
 #include "Adafruit_BluefruitLE_UART.h"
 #include "Adafruit_BLEBattery.h"
 #include "BluefruitConfig.h"
+#include <Wire.h>
+#include "Adafruit_MCP9808.h"
+
+// == AIR TEMP SETUP ==
+Adafruit_MCP9808 airTempSensor = Adafruit_MCP9808();
 
 // == RELAY SETUP ==
 #define PUMP_RELAY 12
@@ -28,8 +33,8 @@ RH_RF69 rf69(RFM69_CS, RFM69_INT);
 RHReliableDatagram rf69_manager(rf69, MY_ADDRESS);
 
 int16_t packetnum = 0; // packet counter, we increment per xmission
-float waterDepth = 0;
 float waterTemp = 0;
+float airTemp = 0;
 
 // == BLE Setup ==
 Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
@@ -39,6 +44,7 @@ Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_
 
 int32_t pcServiceId;
 int32_t pcWaterTempCharId;
+int32_t pcAirTempCharId;
 
 // == Globals ==
 unsigned long loopTime = 0;
@@ -50,9 +56,24 @@ void setup()
     while (!Serial)
         ; // disable in production
     Serial.begin(115200);
+    setupAirTemp();
     setupRelays();
     setupRadio();
     setupBle();
+}
+
+void setupAirTemp()
+{
+    if (!airTempSensor.begin(0x18))
+    {
+        Serial.println("Couldn't find MCP9808! Check your connections and verify the address is correct.");
+        while (1)
+            ;
+    }
+
+    airTempSensor.setResolution(3);
+
+    airTempSensor.wake();
 }
 
 void setupRelays()
@@ -169,6 +190,15 @@ void setupBle()
         error(F("Could not add HRM characteristic"));
     }
 
+    /* Add the Pool Controller characteristic */
+    /* Chars ID for Measurement should be 1 */
+    Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8270): "));
+    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8271, PROPERTIES=0x10, MIN_LEN=2, MAX_LEN=2, VALUE=00-40"), &pcAirTempCharId);
+    if (!success)
+    {
+        error(F("Could not add HRM characteristic"));
+    }
+
     /* Add the Heart Rate Service to the advertising data */
     Serial.print(F("Adding Pool Control Center Service UUID to the advertising payload: "));
     ble.sendCommandCheckOK(F("AT+GAPSETADVDATA=03-02-8E-30"));
@@ -180,19 +210,31 @@ void setupBle()
     Serial.println();
 }
 
-void sendData()
+void getAirTemp()
 {
-    Serial.println("Sending new data!");
+    airTemp = airTempSensor.readTempF();
+    Serial.println(airTemp);
+}
 
+void updateChar(int32_t charId, int value)
+{
     ble.print(F("AT+GATTCHAR="));
-    ble.print(pcWaterTempCharId);
+    ble.print(charId);
     ble.print(F(",00-"));
-    ble.println((int)waterTemp, HEX);
+    ble.println((int)value, HEX);
 
     if (!ble.waitForOK())
     {
         Serial.println(F("Failed to get response!"));
     }
+}
+
+void sendData()
+{
+    Serial.println("Sending new data!");
+
+    updateChar(pcWaterTempCharId, (int)waterTemp);
+    updateChar(pcAirTempCharId, (int)airTemp);
 }
 
 uint8_t data[] = "ack";
@@ -232,6 +274,7 @@ void loop()
         status = !status;
         digitalWrite(PUMP_RELAY, status);
         digitalWrite(HEATER_RELAY, status);
+        getAirTemp();
         sendData();
     }
 

@@ -180,6 +180,10 @@ class _SearchState extends State<Search> {
           setState(() {
             _poolInfo.waterTemp = d[1];
           });
+        } else if (c.uuid == Guid("00008271-0000-1000-8000-00805f9b34fb")) {
+          setState(() {
+            _poolInfo.airTemp = d[1];
+          });
         }
       });
 
@@ -215,39 +219,65 @@ class _SearchState extends State<Search> {
     }
   }
 
+  Widget _loading(BuildContext context) {
+    return Scaffold(
+        appBar: new AppBar(
+          title: Text(widget.title),
+        ),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ));
+  }
+
+  Widget _search(BuildContext context) {
+    return Scaffold(
+      appBar: new AppBar(
+        title: Text(widget.title),
+      ),
+      body: ListView(
+        children: scanResults.values.map((result) {
+          return Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                    result.device.name.isEmpty ? "Unamed" : result.device.name),
+                RaisedButton(
+                  child: Text("Connect"),
+                  onPressed: () {
+                    _connect(result.device);
+                  },
+                )
+              ]);
+        }).toList(),
+      ),
+      floatingActionButton: FloatingActionButton(
+        child: Icon(Icons.search),
+        onPressed: () {
+          _startScan();
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return isConnected
-        ? PoolController(
+    switch (deviceState) {
+      case BluetoothDeviceState.connected:
+        {
+          return PoolController(
             poolInfo: _poolInfo,
-          )
-        : Scaffold(
-            appBar: new AppBar(
-              title: Text(widget.title),
-            ),
-            body: ListView(
-              children: scanResults.values.map((result) {
-                return Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(result.device.name.isEmpty
-                          ? "Unamed"
-                          : result.device.name),
-                      RaisedButton(
-                        child: Text("Connect"),
-                        onPressed: () {
-                          _connect(result.device);
-                        },
-                      )
-                    ]);
-              }).toList(),
-            ),
-            floatingActionButton: FloatingActionButton(
-              child: Icon(Icons.search),
-              onPressed: () {
-                _startScan();
-              },
-            ),
           );
+        }
+
+      case BluetoothDeviceState.connecting:
+        {
+          return _loading(context);
+        }
+
+      default:
+        {
+          return _search(context);
+        }
+    }
   }
 }
