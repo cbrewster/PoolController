@@ -45,6 +45,7 @@ Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_
 int32_t pcServiceId;
 int32_t pcWaterTempCharId;
 int32_t pcAirTempCharId;
+int32_t pcPumpOnCharId;
 
 // == Globals ==
 unsigned long loopTime = 0;
@@ -181,19 +182,25 @@ void setupBle()
         error(F("Could not add Pool Controller service"));
     }
 
-    /* Add the Pool Controller characteristic */
-    /* Chars ID for Measurement should be 1 */
+    /* Add the Pool Controller Water Temp characteristic */
     Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8270): "));
-    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8270, PROPERTIES=0x10, MIN_LEN=2, MAX_LEN=2, VALUE=00-40"), &pcWaterTempCharId);
+    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8270, PROPERTIES=0x10, MIN_LEN=1, MAX_LEN=1, VALUE=00"), &pcWaterTempCharId);
     if (!success)
     {
         error(F("Could not add HRM characteristic"));
     }
 
-    /* Add the Pool Controller characteristic */
-    /* Chars ID for Measurement should be 1 */
-    Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8270): "));
-    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8271, PROPERTIES=0x10, MIN_LEN=2, MAX_LEN=2, VALUE=00-40"), &pcAirTempCharId);
+    /* Add the Pool Controller Air Temp characteristic */
+    Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8271): "));
+    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8271, PROPERTIES=0x10, MIN_LEN=1, MAX_LEN=1, VALUE=00"), &pcAirTempCharId);
+    if (!success)
+    {
+        error(F("Could not add HRM characteristic"));
+    }
+
+    /* Add the Pool Controller Air Temp characteristic */
+    Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8272): "));
+    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8272, PROPERTIES=0x18, MIN_LEN=1, MAX_LEN=1, VALUE=00"), &pcPumpOnCharId);
     if (!success)
     {
         error(F("Could not add HRM characteristic"));
@@ -220,8 +227,8 @@ void updateChar(int32_t charId, int value)
 {
     ble.print(F("AT+GATTCHAR="));
     ble.print(charId);
-    ble.print(F(",00-"));
-    ble.println((int)value, HEX);
+    ble.print(F(","));
+    ble.println((int)value);
 
     if (!ble.waitForOK())
     {

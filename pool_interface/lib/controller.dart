@@ -8,6 +8,7 @@ class PoolInfo {
 
   int waterTemp;
   int airTemp;
+  bool pumpOn;
 }
 
 class PoolController extends StatelessWidget {
@@ -143,7 +144,6 @@ class Dashboard extends StatefulWidget {
 
 class _DashboardState extends State<Dashboard> {
   bool _pumpAuto = true;
-  bool _pumpOn = true;
   bool _heaterAuto = true;
   bool _heaterOn = true;
   int _thermostat = 75;
@@ -153,12 +153,10 @@ class _DashboardState extends State<Dashboard> {
     return Column(children: [
       ControllerStatus(
         auto: _pumpAuto,
-        enabled: _pumpOn,
+        enabled: widget.poolInfo.pumpOn ?? false,
         name: "Water Pump",
         onStatusChange: (value) {
-          setState(() {
-            _pumpOn = value;
-          });
+          setState(() {});
         },
         onModeChange: (value) {
           setState(() {

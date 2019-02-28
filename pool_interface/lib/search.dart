@@ -178,11 +178,11 @@ class _SearchState extends State<Search> {
         });
         if (c.uuid == Guid("00008270-0000-1000-8000-00805f9b34fb")) {
           setState(() {
-            _poolInfo.waterTemp = d[1];
+            _poolInfo.waterTemp = d[0];
           });
         } else if (c.uuid == Guid("00008271-0000-1000-8000-00805f9b34fb")) {
           setState(() {
-            _poolInfo.airTemp = d[1];
+            _poolInfo.airTemp = d[0];
           });
         }
       });
@@ -231,32 +231,27 @@ class _SearchState extends State<Search> {
 
   Widget _search(BuildContext context) {
     return Scaffold(
-      appBar: new AppBar(
-        title: Text(widget.title),
-      ),
-      body: ListView(
-        children: scanResults.values.map((result) {
-          return Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                    result.device.name.isEmpty ? "Unamed" : result.device.name),
-                RaisedButton(
-                  child: Text("Connect"),
-                  onPressed: () {
-                    _connect(result.device);
-                  },
-                )
-              ]);
-        }).toList(),
-      ),
-      floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.search),
-        onPressed: () {
-          _startScan();
-        },
-      ),
-    );
+        appBar: new AppBar(
+          title: Text(widget.title),
+        ),
+        body: ListView(
+          children: scanResults.values.map((result) {
+            return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(result.device.name.isEmpty
+                      ? "Unamed"
+                      : result.device.name),
+                  RaisedButton(
+                    child: Text("Connect"),
+                    onPressed: () {
+                      _connect(result.device);
+                    },
+                  )
+                ]);
+          }).toList(),
+        ),
+        floatingActionButton: _buildScanningButton());
   }
 
   @override
@@ -268,7 +263,6 @@ class _SearchState extends State<Search> {
             poolInfo: _poolInfo,
           );
         }
-
       case BluetoothDeviceState.connecting:
         {
           return _loading(context);
