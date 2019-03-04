@@ -49,11 +49,16 @@ class _SearchState extends State<Search> {
     super.initState();
     _poolInfo.togglePump = () {
       var pumpOn = _poolInfo.pumpOn ? 0 : 1;
+      // Optimistically Update
+      _poolInfo.pumpOn = !_poolInfo.pumpOn;
       _writeCharacteristic(getCharacteristic("8272"), [pumpOn]);
     };
+
     _poolInfo.toggleHeater = () {
-      var pumpOn = _poolInfo.heaterOn ? 0 : 1;
-      _writeCharacteristic(getCharacteristic("8273"), [pumpOn]);
+      var heaterOn = _poolInfo.heaterOn ? 0 : 1;
+      // Optimistically Update
+      _poolInfo.heaterOn = !_poolInfo.heaterOn;
+      _writeCharacteristic(getCharacteristic("8273"), [heaterOn]);
     };
 
     _flutterBlue.state.then((s) {
@@ -88,7 +93,6 @@ class _SearchState extends State<Search> {
         withServices: [
           new Guid('0000308E-0000-1000-8000-00805F9B34FB')
         ]).listen((scanResult) {
-      print('localName: ${scanResult.advertisementData.localName}');
       setState(() {
         scanResults[scanResult.device.id] = scanResult;
       });
@@ -128,15 +132,32 @@ class _SearchState extends State<Search> {
         device.discoverServices().then((s) {
           setState(() {
             services = s;
-            services.forEach((s) {
-              print("Char ${s.characteristics.map((c) {
-                return c.uuid;
-              })}");
-            });
           });
           var poolService = services.firstWhere(
               (s) => s.uuid == Guid("0000308e-0000-1000-8000-00805f9b34fb"));
           poolService?.characteristics?.forEach((c) {
+            device.readCharacteristic(c).then((value) {
+              if (c.uuid == Guid("00008270-0000-1000-8000-00805f9b34fb")) {
+                setState(() {
+                  _poolInfo.waterTemp = value[0];
+                });
+              } else if (c.uuid ==
+                  Guid("00008271-0000-1000-8000-00805f9b34fb")) {
+                setState(() {
+                  _poolInfo.airTemp = value[0];
+                });
+              } else if (c.uuid ==
+                  Guid("00008272-0000-1000-8000-00805f9b34fb")) {
+                setState(() {
+                  _poolInfo.pumpOn = value[0] == 1;
+                });
+              } else if (c.uuid ==
+                  Guid("00008273-0000-1000-8000-00805f9b34fb")) {
+                setState(() {
+                  _poolInfo.heaterOn = value[0] == 1;
+                });
+              }
+            });
             _setNotification(c);
           });
         });
@@ -186,9 +207,6 @@ class _SearchState extends State<Search> {
       await device.setNotifyValue(c, true);
 
       final sub = device.onValueChanged(c).listen((d) {
-        setState(() {
-          print("Update: $d");
-        });
         if (c.uuid == Guid("00008270-0000-1000-8000-00805f9b34fb")) {
           setState(() {
             _poolInfo.waterTemp = d[0];
@@ -218,7 +236,6 @@ class _SearchState extends State<Search> {
     var state = await d.state;
     setState(() {
       deviceState = state;
-      print('State refreshed: $deviceState');
     });
   }
 
@@ -280,6 +297,10 @@ class _SearchState extends State<Search> {
     switch (deviceState) {
       case BluetoothDeviceState.connected:
         {
+          if (_poolInfo.isLoading()) {
+            return _loading(context);
+          }
+
           return PoolController(
             poolInfo: _poolInfo,
           );

@@ -45,6 +45,7 @@ int32_t pcWaterTempCharId;
 int32_t pcAirTempCharId;
 int32_t pcPumpOnCharId;
 int32_t pcHeaterOnCharId;
+int32_t pcThermostatCharId;
 
 // == Globals ==
 unsigned long loopTime = 0;
@@ -138,6 +139,26 @@ void error(const __FlashStringHelper *err)
         ;
 }
 
+// Sets up a new characteristic with the given UUID, Properties, and puts the result characteristic
+// id in `charId`.
+void registerCharacteristic(char *uuid, char *properties, int32_t *charId)
+{
+    boolean success;
+
+    Serial.print(F("Adding the Pool Controller characteristic (UUID = "));
+    Serial.print(uuid);
+    Serial.println(F("): "));
+
+    char command[80];
+    sprintf(command, "AT+GATTADDCHAR=UUID=%s, PROPERTIES=%s, MIN_LEN=1, MAX_LEN=1, VALUE=00", uuid, properties);
+
+    success = ble.sendCommandWithIntReply(command, charId);
+    if (!success)
+    {
+        error(F("Could not add pool controller characteristic"));
+    }
+}
+
 void setupBle()
 {
     boolean success;
@@ -185,36 +206,19 @@ void setupBle()
     }
 
     /* Add the Pool Controller Water Temp characteristic */
-    Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8270): "));
-    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8270, PROPERTIES=0x10, MIN_LEN=1, MAX_LEN=1, VALUE=00"), &pcWaterTempCharId);
-    if (!success)
-    {
-        error(F("Could not add HRM characteristic"));
-    }
+    registerCharacteristic("0x8270", "0x10", &pcWaterTempCharId);
 
     /* Add the Pool Controller Air Temp characteristic */
-    Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8271): "));
-    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8271, PROPERTIES=0x10, MIN_LEN=1, MAX_LEN=1, VALUE=00"), &pcAirTempCharId);
-    if (!success)
-    {
-        error(F("Could not add HRM characteristic"));
-    }
+    registerCharacteristic("0x8271", "0x10", &pcAirTempCharId);
 
     /* Add the Pool Controller Pump On characteristic */
-    Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8272): "));
-    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8272, PROPERTIES=0x18, MIN_LEN=1, MAX_LEN=1, VALUE=00"), &pcPumpOnCharId);
-    if (!success)
-    {
-        error(F("Could not add HRM characteristic"));
-    }
+    registerCharacteristic("0x8272", "0x18", &pcPumpOnCharId);
 
     /* Add the Pool Controller Heater On characteristic */
-    Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8273): "));
-    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8273, PROPERTIES=0x18, MIN_LEN=1, MAX_LEN=1, VALUE=00"), &pcHeaterOnCharId);
-    if (!success)
-    {
-        error(F("Could not add HRM characteristic"));
-    }
+    registerCharacteristic("0x8273", "0x18", &pcHeaterOnCharId);
+
+    /* Add the Pool Controller Thermostat characteristic */
+    registerCharacteristic("0x8274", "0x18", &pcThermostatCharId);
 
     /* Add the Heart Rate Service to the advertising data */
     Serial.print(F("Adding Pool Control Center Service UUID to the advertising payload: "));

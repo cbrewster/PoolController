@@ -4,8 +4,7 @@ import 'dart:math';
 import 'dart:async';
 
 class PoolInfo {
-  PoolInfo(
-      {this.waterTemp, this.airTemp, this.pumpOn = false, this.togglePump});
+  PoolInfo();
 
   int waterTemp;
   int airTemp;
@@ -14,6 +13,13 @@ class PoolInfo {
 
   VoidCallback toggleHeater;
   VoidCallback togglePump;
+
+  bool isLoading() {
+    return waterTemp == null ||
+        airTemp == null ||
+        pumpOn == null ||
+        heaterOn == null;
+  }
 }
 
 class PoolController extends StatelessWidget {
