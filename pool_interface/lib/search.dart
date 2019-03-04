@@ -128,6 +128,11 @@ class _SearchState extends State<Search> {
       setState(() {
         deviceState = s;
       });
+      if (s == BluetoothDeviceState.disconnected) {
+        setState(() {
+          _poolInfo = PoolInfo();
+        });
+      }
       if (s == BluetoothDeviceState.connected) {
         device.discoverServices().then((s) {
           setState(() {
@@ -136,6 +141,15 @@ class _SearchState extends State<Search> {
           var poolService = services.firstWhere(
               (s) => s.uuid == Guid("0000308e-0000-1000-8000-00805f9b34fb"));
           poolService?.characteristics?.forEach((c) {
+            if (c.uuid == Guid("00008272-0000-1000-8000-00805f9b34fb")) {
+              device.readCharacteristic(c).then((value) {
+                setState(() {
+                  _poolInfo.pumpOn = value[0] == 1;
+                });
+              }).catchError((error) {
+                print("Error occurred $error");
+              });
+            }
             device.readCharacteristic(c).then((value) {
               if (c.uuid == Guid("00008270-0000-1000-8000-00805f9b34fb")) {
                 setState(() {

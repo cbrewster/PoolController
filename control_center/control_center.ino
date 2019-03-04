@@ -39,8 +39,8 @@ Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_
 
 // Disable this in production
 #define FACTORYRESET_ENABLE 1
+#define MINIMUM_FIRMWARE_VERSION "0.7.0"
 
-int32_t pcServiceId;
 int32_t pcWaterTempCharId;
 int32_t pcAirTempCharId;
 int32_t pcPumpOnCharId;
@@ -57,8 +57,8 @@ int heaterOn = 0;
 
 void setup()
 {
-    // while (!Serial)
-    //     ; // disable in production
+    while (!Serial)
+        ; // disable in production
     Serial.begin(115200);
     setupAirTemp();
     setupRelays();
@@ -84,6 +84,9 @@ void setupRelays()
 {
     pinMode(PUMP_RELAY, OUTPUT);
     pinMode(HEATER_RELAY, OUTPUT);
+
+    pumpOn = false;
+    heaterOn = false;
 
     digitalWrite(PUMP_RELAY, LOW);
     digitalWrite(HEATER_RELAY, LOW);
@@ -141,7 +144,7 @@ void error(const __FlashStringHelper *err)
 
 // Sets up a new characteristic with the given UUID, Properties, and puts the result characteristic
 // id in `charId`.
-void registerCharacteristic(char *uuid, char *properties, int32_t *charId)
+void registerCharacteristic(char uuid[], char properties[], int32_t *charId)
 {
     boolean success;
 
@@ -159,13 +162,39 @@ void registerCharacteristic(char *uuid, char *properties, int32_t *charId)
     }
 }
 
+void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
+{
+    Serial.println("YEET!");
+    Serial.write(data, len);
+    if (len == 0)
+    {
+        return;
+    }
+
+    if (charId == pcPumpOnCharId)
+    {
+        pumpOn = data[0] == 1;
+    }
+    else if (charId == pcHeaterOnCharId)
+    {
+        heaterOn = data[0] == 1;
+        if (heaterOn)
+        {
+            pumpOn = true;
+            updateChar(pcPumpOnCharId, (int)pumpOn);
+        }
+    }
+    digitalWrite(PUMP_RELAY, pumpOn);
+    digitalWrite(HEATER_RELAY, heaterOn);
+}
+
 void setupBle()
 {
     boolean success;
 
     Serial.print(F("Initialising the Bluefruit LE module: "));
 
-    if (!ble.begin(VERBOSE_MODE))
+    if (!ble.begin(false))
     {
         error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
     }
@@ -179,6 +208,11 @@ void setupBle()
         {
             error(F("Couldn't factory reset"));
         }
+    }
+
+    if (!ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION))
+    {
+        error(F("Callback requires at least 0.7.0"));
     }
 
     /* Disable command echo from Bluefruit */
@@ -199,11 +233,7 @@ void setupBle()
     /* Add the Heart Rate Service definition */
     /* Service ID should be 1 */
     Serial.println(F("Adding the Pool Controller Service definition (UUID = 0x308E): "));
-    success = ble.sendCommandWithIntReply(F("AT+GATTADDSERVICE=UUID=0x308E"), &pcServiceId);
-    if (!success)
-    {
-        error(F("Could not add Pool Controller service"));
-    }
+    success = ble.sendCommandCheckOK(F("AT+GATTADDSERVICE=UUID=0x308E"));
 
     /* Add the Pool Controller Water Temp characteristic */
     registerCharacteristic("0x8270", "0x10", &pcWaterTempCharId);
@@ -227,6 +257,9 @@ void setupBle()
     /* Reset the device for the new service setting changes to take effect */
     Serial.print(F("Performing a SW reset (service changes require a reset): "));
     ble.reset();
+
+    ble.setBleGattRxCallback(pcPumpOnCharId, BleGattRX);
+    ble.setBleGattRxCallback(pcHeaterOnCharId, BleGattRX);
 
     Serial.println();
 }
@@ -260,20 +293,6 @@ void sendData()
     updateChar(pcHeaterOnCharId, (int)heaterOn);
 }
 
-int readData(int32_t charId)
-{
-    int32_t reply;
-    boolean success;
-    char command[20];
-    sprintf(command, "AT+GATTCHAR=%d", charId);
-    success = ble.sendCommandWithIntReply(command, &reply);
-    if (!success)
-    {
-        error(F("Could not add HRM characteristic"));
-    }
-    return (int)reply;
-}
-
 uint8_t data[] = "ack";
 uint8_t buf[RH_RF69_MAX_MESSAGE_LEN];
 
@@ -305,16 +324,13 @@ void loop()
 
     loopTime += millis() - lastTime;
     lastTime = millis();
-    if (loopTime > 500)
+    if (loopTime > 3000)
     {
         loopTime = 0;
-        digitalWrite(PUMP_RELAY, pumpOn);
-        digitalWrite(HEATER_RELAY, heaterOn);
-        pumpOn = readData(pcPumpOnCharId);
-        heaterOn = readData(pcHeaterOnCharId);
         getAirTemp();
         sendData();
     }
 
+    ble.update(200);
     delay(1);
 }
