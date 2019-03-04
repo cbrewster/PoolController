@@ -12,8 +12,12 @@ class Search extends StatefulWidget {
   State<StatefulWidget> createState() => _SearchState();
 }
 
-abstract class CharacteristicCallback {
-  void callback(List<int> data);
+BluetoothCharacteristic getCharacteristic(String four) {
+  return BluetoothCharacteristic(
+      uuid: Guid("0000$four-0000-1000-8000-00805F9B34FB"),
+      serviceUuid: Guid("0000308E-0000-1000-8000-00805F9B34FB"),
+      descriptors: [],
+      properties: CharacteristicProperties(write: true, notify: true));
 }
 
 class _SearchState extends State<Search> {
@@ -43,6 +47,15 @@ class _SearchState extends State<Search> {
   @override
   void initState() {
     super.initState();
+    _poolInfo.togglePump = () {
+      var pumpOn = _poolInfo.pumpOn ? 0 : 1;
+      _writeCharacteristic(getCharacteristic("8272"), [pumpOn]);
+    };
+    _poolInfo.toggleHeater = () {
+      var pumpOn = _poolInfo.heaterOn ? 0 : 1;
+      _writeCharacteristic(getCharacteristic("8273"), [pumpOn]);
+    };
+
     _flutterBlue.state.then((s) {
       setState(() {
         state = s;
@@ -148,8 +161,8 @@ class _SearchState extends State<Search> {
     setState(() {});
   }
 
-  _writeCharacteristic(BluetoothCharacteristic c) async {
-    await device.writeCharacteristic(c, [0x12, 0x34],
+  _writeCharacteristic(BluetoothCharacteristic c, List<int> values) async {
+    await device.writeCharacteristic(c, values,
         type: CharacteristicWriteType.withResponse);
     setState(() {});
   }
@@ -183,6 +196,14 @@ class _SearchState extends State<Search> {
         } else if (c.uuid == Guid("00008271-0000-1000-8000-00805f9b34fb")) {
           setState(() {
             _poolInfo.airTemp = d[0];
+          });
+        } else if (c.uuid == Guid("00008272-0000-1000-8000-00805f9b34fb")) {
+          setState(() {
+            _poolInfo.pumpOn = d[0] == 1;
+          });
+        } else if (c.uuid == Guid("00008273-0000-1000-8000-00805f9b34fb")) {
+          setState(() {
+            _poolInfo.heaterOn = d[0] == 1;
           });
         }
       });

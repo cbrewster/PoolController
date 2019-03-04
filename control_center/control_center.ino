@@ -33,8 +33,6 @@ RH_RF69 rf69(RFM69_CS, RFM69_INT);
 RHReliableDatagram rf69_manager(rf69, MY_ADDRESS);
 
 int16_t packetnum = 0; // packet counter, we increment per xmission
-float waterTemp = 0;
-float airTemp = 0;
 
 // == BLE Setup ==
 Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_RST);
@@ -46,16 +44,20 @@ int32_t pcServiceId;
 int32_t pcWaterTempCharId;
 int32_t pcAirTempCharId;
 int32_t pcPumpOnCharId;
+int32_t pcHeaterOnCharId;
 
 // == Globals ==
 unsigned long loopTime = 0;
 unsigned long lastTime;
-boolean status = true;
+float waterTemp = 0;
+float airTemp = 0;
+int pumpOn = 0;
+int heaterOn = 0;
 
 void setup()
 {
-    while (!Serial)
-        ; // disable in production
+    // while (!Serial)
+    //     ; // disable in production
     Serial.begin(115200);
     setupAirTemp();
     setupRelays();
@@ -198,9 +200,17 @@ void setupBle()
         error(F("Could not add HRM characteristic"));
     }
 
-    /* Add the Pool Controller Air Temp characteristic */
+    /* Add the Pool Controller Pump On characteristic */
     Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8272): "));
     success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8272, PROPERTIES=0x18, MIN_LEN=1, MAX_LEN=1, VALUE=00"), &pcPumpOnCharId);
+    if (!success)
+    {
+        error(F("Could not add HRM characteristic"));
+    }
+
+    /* Add the Pool Controller Heater On characteristic */
+    Serial.println(F("Adding the Pool Controller characteristic (UUID = 0x8273): "));
+    success = ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8273, PROPERTIES=0x18, MIN_LEN=1, MAX_LEN=1, VALUE=00"), &pcHeaterOnCharId);
     if (!success)
     {
         error(F("Could not add HRM characteristic"));
@@ -242,6 +252,22 @@ void sendData()
 
     updateChar(pcWaterTempCharId, (int)waterTemp);
     updateChar(pcAirTempCharId, (int)airTemp);
+    updateChar(pcPumpOnCharId, (int)pumpOn);
+    updateChar(pcHeaterOnCharId, (int)heaterOn);
+}
+
+int readData(int32_t charId)
+{
+    int32_t reply;
+    boolean success;
+    char command[20];
+    sprintf(command, "AT+GATTCHAR=%d", charId);
+    success = ble.sendCommandWithIntReply(command, &reply);
+    if (!success)
+    {
+        error(F("Could not add HRM characteristic"));
+    }
+    return (int)reply;
 }
 
 uint8_t data[] = "ack";
@@ -275,12 +301,13 @@ void loop()
 
     loopTime += millis() - lastTime;
     lastTime = millis();
-    if (loopTime > 3000)
+    if (loopTime > 500)
     {
         loopTime = 0;
-        status = !status;
-        digitalWrite(PUMP_RELAY, status);
-        digitalWrite(HEATER_RELAY, status);
+        digitalWrite(PUMP_RELAY, pumpOn);
+        digitalWrite(HEATER_RELAY, heaterOn);
+        pumpOn = readData(pcPumpOnCharId);
+        heaterOn = readData(pcHeaterOnCharId);
         getAirTemp();
         sendData();
     }
