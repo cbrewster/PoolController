@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:pool_interface/indicator.dart';
-import 'dart:math';
 import 'dart:async';
 
 class PoolInfo {
@@ -8,17 +7,21 @@ class PoolInfo {
 
   int waterTemp;
   int airTemp;
+  int thermostat;
   bool pumpOn;
   bool heaterOn;
 
   VoidCallback toggleHeater;
   VoidCallback togglePump;
+  VoidCallback increaseThermostat;
+  VoidCallback decreaseThermostat;
 
   bool isLoading() {
     return waterTemp == null ||
         airTemp == null ||
         pumpOn == null ||
-        heaterOn == null;
+        heaterOn == null ||
+        thermostat == null;
   }
 }
 
@@ -156,8 +159,6 @@ class Dashboard extends StatefulWidget {
 class _DashboardState extends State<Dashboard> {
   bool _pumpAuto = true;
   bool _heaterAuto = true;
-  bool _heaterOn = true;
-  int _thermostat = 75;
 
   @override
   Widget build(BuildContext context) {
@@ -209,16 +210,14 @@ class _DashboardState extends State<Dashboard> {
                           children: <Widget>[
                             RaisedButton(
                               child: const Icon(Icons.remove),
-                              onPressed: _thermostat <= 70 || _heaterAuto
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _thermostat = max(_thermostat - 1, 70);
-                                      });
-                                    },
+                              onPressed: () {
+                                setState(() {
+                                  widget.poolInfo.decreaseThermostat();
+                                });
+                              },
                             ),
                             Text(
-                              "$_thermostat ºF",
+                              "${widget.poolInfo.thermostat} ºF",
                               style: TextStyle(
                                 fontSize: 40,
                                 fontWeight: FontWeight.bold,
@@ -226,13 +225,11 @@ class _DashboardState extends State<Dashboard> {
                             ),
                             RaisedButton(
                               child: const Icon(Icons.add),
-                              onPressed: _thermostat >= 84 || _heaterAuto
-                                  ? null
-                                  : () {
-                                      setState(() {
-                                        _thermostat = min(_thermostat + 1, 84);
-                                      });
-                                    },
+                              onPressed: () {
+                                setState(() {
+                                  widget.poolInfo.increaseThermostat();
+                                });
+                              },
                             ),
                           ],
                         )),

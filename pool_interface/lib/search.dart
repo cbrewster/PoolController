@@ -2,6 +2,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:pool_interface/controller.dart';
 import 'dart:async';
+import 'dart:math';
+
+Guid poolServiceGuid = Guid("0000308E-0000-1000-8000-00805F9B34FB");
+Guid waterTempGuid = Guid("00008270-0000-1000-8000-00805F9B34FB");
+Guid airTempGuid = Guid("00008271-0000-1000-8000-00805F9B34FB");
+Guid pumpOnGuid = Guid("00008272-0000-1000-8000-00805F9B34FB");
+Guid heaterOnGuid = Guid("00008273-0000-1000-8000-00805F9B34FB");
+Guid thermostatGuid = Guid("00008274-0000-1000-8000-00805F9B34FB");
 
 class Search extends StatefulWidget {
   Search({Key key, this.title}) : super(key: key);
@@ -12,12 +20,12 @@ class Search extends StatefulWidget {
   State<StatefulWidget> createState() => _SearchState();
 }
 
-BluetoothCharacteristic getCharacteristic(String four) {
+BluetoothCharacteristic getCharacteristic(Guid charGuid, Guid serviceGuid) {
   return BluetoothCharacteristic(
-      uuid: Guid("0000$four-0000-1000-8000-00805F9B34FB"),
-      serviceUuid: Guid("0000308E-0000-1000-8000-00805F9B34FB"),
+      uuid: charGuid,
+      serviceUuid: serviceGuid,
       descriptors: [],
-      properties: CharacteristicProperties(write: true, notify: true));
+      properties: null);
 }
 
 class _SearchState extends State<Search> {
@@ -47,19 +55,6 @@ class _SearchState extends State<Search> {
   @override
   void initState() {
     super.initState();
-    _poolInfo.togglePump = () {
-      var pumpOn = _poolInfo.pumpOn ? 0 : 1;
-      // Optimistically Update
-      _poolInfo.pumpOn = !_poolInfo.pumpOn;
-      _writeCharacteristic(getCharacteristic("8272"), [pumpOn]);
-    };
-
-    _poolInfo.toggleHeater = () {
-      var heaterOn = _poolInfo.heaterOn ? 0 : 1;
-      // Optimistically Update
-      _poolInfo.heaterOn = !_poolInfo.heaterOn;
-      _writeCharacteristic(getCharacteristic("8273"), [heaterOn]);
-    };
 
     _flutterBlue.state.then((s) {
       setState(() {
@@ -90,9 +85,7 @@ class _SearchState extends State<Search> {
   _startScan() {
     _scanSubscription = _flutterBlue.scan(
         timeout: const Duration(seconds: 5),
-        withServices: [
-          new Guid('0000308E-0000-1000-8000-00805F9B34FB')
-        ]).listen((scanResult) {
+        withServices: [poolServiceGuid]).listen((scanResult) {
       setState(() {
         scanResults[scanResult.device.id] = scanResult;
       });
@@ -113,6 +106,38 @@ class _SearchState extends State<Search> {
 
   _connect(BluetoothDevice d) async {
     device = d;
+    _poolInfo = new PoolInfo();
+    _poolInfo.togglePump = () {
+      var pumpOn = _poolInfo.pumpOn ? 0 : 1;
+      // Optimistically Update
+      _poolInfo.pumpOn = !_poolInfo.pumpOn;
+      _writeCharacteristic(
+          getCharacteristic(pumpOnGuid, poolServiceGuid), [pumpOn]);
+    };
+
+    _poolInfo.toggleHeater = () {
+      var heaterOn = _poolInfo.heaterOn ? 0 : 1;
+      // Optimistically Update
+      _poolInfo.heaterOn = !_poolInfo.heaterOn;
+      _writeCharacteristic(
+          getCharacteristic(heaterOnGuid, poolServiceGuid), [heaterOn]);
+    };
+
+    _poolInfo.increaseThermostat = () {
+      var thermostat = min(_poolInfo.thermostat + 1, 84);
+      print("Setting thermostat $thermostat");
+
+      _writeCharacteristic(
+          getCharacteristic(thermostatGuid, poolServiceGuid), [thermostat]);
+    };
+
+    _poolInfo.decreaseThermostat = () {
+      var thermostat = max(_poolInfo.thermostat - 1, 70);
+      print("Setting thermostat $thermostat");
+
+      _writeCharacteristic(
+          getCharacteristic(thermostatGuid, poolServiceGuid), [thermostat]);
+    };
 
     deviceConnection = _flutterBlue
         .connect(device, timeout: const Duration(seconds: 5))
@@ -138,41 +163,14 @@ class _SearchState extends State<Search> {
           setState(() {
             services = s;
           });
-          var poolService = services.firstWhere(
-              (s) => s.uuid == Guid("0000308e-0000-1000-8000-00805f9b34fb"));
-          poolService?.characteristics?.forEach((c) {
-            if (c.uuid == Guid("00008272-0000-1000-8000-00805f9b34fb")) {
-              device.readCharacteristic(c).then((value) {
-                setState(() {
-                  _poolInfo.pumpOn = value[0] == 1;
-                });
-              }).catchError((error) {
-                print("Error occurred $error");
-              });
-            }
-            device.readCharacteristic(c).then((value) {
-              if (c.uuid == Guid("00008270-0000-1000-8000-00805f9b34fb")) {
-                setState(() {
-                  _poolInfo.waterTemp = value[0];
-                });
-              } else if (c.uuid ==
-                  Guid("00008271-0000-1000-8000-00805f9b34fb")) {
-                setState(() {
-                  _poolInfo.airTemp = value[0];
-                });
-              } else if (c.uuid ==
-                  Guid("00008272-0000-1000-8000-00805f9b34fb")) {
-                setState(() {
-                  _poolInfo.pumpOn = value[0] == 1;
-                });
-              } else if (c.uuid ==
-                  Guid("00008273-0000-1000-8000-00805f9b34fb")) {
-                setState(() {
-                  _poolInfo.heaterOn = value[0] == 1;
-                });
-              }
+          var poolService =
+              services.firstWhere((s) => s.uuid == poolServiceGuid);
+
+          poolService.characteristics.forEach((char) {
+            print("Requesting ${char.uuid}");
+            device.readCharacteristic(char).then((data) {
+              print("===== GOT ${char.uuid} = $data");
             });
-            _setNotification(c);
           });
         });
       }
@@ -221,21 +219,25 @@ class _SearchState extends State<Search> {
       await device.setNotifyValue(c, true);
 
       final sub = device.onValueChanged(c).listen((d) {
-        if (c.uuid == Guid("00008270-0000-1000-8000-00805f9b34fb")) {
+        if (c.uuid == waterTempGuid) {
           setState(() {
             _poolInfo.waterTemp = d[0];
           });
-        } else if (c.uuid == Guid("00008271-0000-1000-8000-00805f9b34fb")) {
+        } else if (c.uuid == airTempGuid) {
           setState(() {
             _poolInfo.airTemp = d[0];
           });
-        } else if (c.uuid == Guid("00008272-0000-1000-8000-00805f9b34fb")) {
+        } else if (c.uuid == pumpOnGuid) {
           setState(() {
             _poolInfo.pumpOn = d[0] == 1;
           });
-        } else if (c.uuid == Guid("00008273-0000-1000-8000-00805f9b34fb")) {
+        } else if (c.uuid == heaterOnGuid) {
           setState(() {
             _poolInfo.heaterOn = d[0] == 1;
+          });
+        } else if (c.uuid == thermostatGuid) {
+          setState(() {
+            _poolInfo.thermostat = d[0];
           });
         }
       });

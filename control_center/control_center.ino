@@ -54,6 +54,7 @@ float waterTemp = 0;
 float airTemp = 0;
 int pumpOn = 0;
 int heaterOn = 0;
+int thermostat = 75;
 
 void setup()
 {
@@ -144,7 +145,7 @@ void error(const __FlashStringHelper *err)
 
 // Sets up a new characteristic with the given UUID, Properties, and puts the result characteristic
 // id in `charId`.
-void registerCharacteristic(char uuid[], char properties[], int32_t *charId)
+void registerCharacteristic(char uuid[], char properties[], int value, int32_t *charId)
 {
     boolean success;
 
@@ -153,7 +154,7 @@ void registerCharacteristic(char uuid[], char properties[], int32_t *charId)
     Serial.println(F("): "));
 
     char command[80];
-    sprintf(command, "AT+GATTADDCHAR=UUID=%s, PROPERTIES=%s, MIN_LEN=1, MAX_LEN=1, VALUE=00", uuid, properties);
+    sprintf(command, "AT+GATTADDCHAR=UUID=%s, PROPERTIES=%s, MIN_LEN=1, MAX_LEN=1, DATATYPE=3, VALUE=%d", uuid, properties, value);
 
     success = ble.sendCommandWithIntReply(command, charId);
     if (!success)
@@ -164,8 +165,6 @@ void registerCharacteristic(char uuid[], char properties[], int32_t *charId)
 
 void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
 {
-    Serial.println("YEET!");
-    Serial.write(data, len);
     if (len == 0)
     {
         return;
@@ -174,6 +173,11 @@ void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
     if (charId == pcPumpOnCharId)
     {
         pumpOn = data[0] == 1;
+        if (heaterOn && !pumpOn)
+        {
+            heaterOn = false;
+            updateChar(pcHeaterOnCharId, (int)heaterOn);
+        }
     }
     else if (charId == pcHeaterOnCharId)
     {
@@ -183,6 +187,11 @@ void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
             pumpOn = true;
             updateChar(pcPumpOnCharId, (int)pumpOn);
         }
+    }
+    else if (charId == pcThermostatCharId)
+    {
+        thermostat = data[0];
+        printf("Set thermostat to %d\n", thermostat);
     }
     digitalWrite(PUMP_RELAY, pumpOn);
     digitalWrite(HEATER_RELAY, heaterOn);
@@ -236,19 +245,19 @@ void setupBle()
     success = ble.sendCommandCheckOK(F("AT+GATTADDSERVICE=UUID=0x308E"));
 
     /* Add the Pool Controller Water Temp characteristic */
-    registerCharacteristic("0x8270", "0x10", &pcWaterTempCharId);
+    registerCharacteristic("0x8270", "0x12", (int)waterTemp, &pcWaterTempCharId);
 
     /* Add the Pool Controller Air Temp characteristic */
-    registerCharacteristic("0x8271", "0x10", &pcAirTempCharId);
+    registerCharacteristic("0x8271", "0x12", (int)airTemp, &pcAirTempCharId);
 
     /* Add the Pool Controller Pump On characteristic */
-    registerCharacteristic("0x8272", "0x18", &pcPumpOnCharId);
+    registerCharacteristic("0x8272", "0x1A", pumpOn == 1, &pcPumpOnCharId);
 
     /* Add the Pool Controller Heater On characteristic */
-    registerCharacteristic("0x8273", "0x18", &pcHeaterOnCharId);
+    registerCharacteristic("0x8273", "0x1A", heaterOn == 1, &pcHeaterOnCharId);
 
     /* Add the Pool Controller Thermostat characteristic */
-    registerCharacteristic("0x8274", "0x18", &pcThermostatCharId);
+    registerCharacteristic("0x8274", "0x1A", thermostat, &pcThermostatCharId);
 
     /* Add the Heart Rate Service to the advertising data */
     Serial.print(F("Adding Pool Control Center Service UUID to the advertising payload: "));
@@ -260,6 +269,7 @@ void setupBle()
 
     ble.setBleGattRxCallback(pcPumpOnCharId, BleGattRX);
     ble.setBleGattRxCallback(pcHeaterOnCharId, BleGattRX);
+    ble.setBleGattRxCallback(pcThermostatCharId, BleGattRX);
 
     Serial.println();
 }
@@ -289,8 +299,6 @@ void sendData()
 
     updateChar(pcWaterTempCharId, (int)waterTemp);
     updateChar(pcAirTempCharId, (int)airTemp);
-    updateChar(pcPumpOnCharId, (int)pumpOn);
-    updateChar(pcHeaterOnCharId, (int)heaterOn);
 }
 
 uint8_t data[] = "ack";
