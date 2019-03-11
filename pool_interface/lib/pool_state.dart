@@ -1,19 +1,20 @@
 import 'package:flutter/material.dart';
 
 class PoolState {
-  PoolState();
+  PoolState(
+      {this.waterTemp,
+      this.airTemp,
+      this.thermostat,
+      this.pumpManual,
+      this.heaterManual,
+      this.pumpStatus,
+      this.heaterStatus});
 
   int waterTemp;
   int airTemp;
   int thermostat;
-  bool pumpOn;
-  bool heaterOn;
-
-  bool isLoading() {
-    return waterTemp == null ||
-        airTemp == null ||
-        pumpOn == null ||
-        heaterOn == null ||
-        thermostat == null;
-  }
+  bool pumpManual;
+  bool heaterManual;
+  bool pumpStatus;
+  bool heaterStatus;
 }

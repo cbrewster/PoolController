@@ -6,9 +6,11 @@ import 'dart:math';
 Guid poolServiceGuid = Guid("0000308E-0000-1000-8000-00805F9B34FB");
 Guid _waterTempGuid = Guid("00008270-0000-1000-8000-00805F9B34FB");
 Guid _airTempGuid = Guid("00008271-0000-1000-8000-00805F9B34FB");
-Guid _pumpOnGuid = Guid("00008272-0000-1000-8000-00805F9B34FB");
-Guid _heaterOnGuid = Guid("00008273-0000-1000-8000-00805F9B34FB");
+Guid _pumpManualGuid = Guid("00008272-0000-1000-8000-00805F9B34FB");
+Guid _heaterManualGuid = Guid("00008273-0000-1000-8000-00805F9B34FB");
 Guid _thermostatGuid = Guid("00008274-0000-1000-8000-00805F9B34FB");
+Guid _pumpStatusGuid = Guid("00008275-0000-1000-8000-00805F9B34FB");
+Guid _heaterStatusGuid = Guid("00008276-0000-1000-8000-00805F9B34FB");
 
 class ControlUnit {
   final BluetoothDevice device;
@@ -17,6 +19,7 @@ class ControlUnit {
   final Map<Guid, StreamSubscription> _charSubscriptions = {};
   final StreamController<PoolState> _streamController = StreamController();
   final Map<Guid, BluetoothCharacteristic> _characteristics = {};
+  bool loading = true;
 
   Stream<PoolState> poolState() => _streamController.stream;
 
@@ -33,24 +36,55 @@ class ControlUnit {
             _subscribe(characteristic, (data) => _state.waterTemp = data[0]);
           } else if (characteristic.uuid == _airTempGuid) {
             _subscribe(characteristic, (data) => _state.airTemp = data[0]);
-          } else if (characteristic.uuid == _pumpOnGuid) {
-            _subscribe(characteristic, (data) => _state.pumpOn = data[0] == 1);
-          } else if (characteristic.uuid == _heaterOnGuid) {
+          } else if (characteristic.uuid == _pumpManualGuid) {
             _subscribe(
-                characteristic, (data) => _state.heaterOn = data[0] == 1);
+                characteristic, (data) => _state.pumpManual = data[0] == 1);
+          } else if (characteristic.uuid == _heaterManualGuid) {
+            _subscribe(
+                characteristic, (data) => _state.heaterManual = data[0] == 1);
           } else if (characteristic.uuid == _thermostatGuid) {
             _subscribe(characteristic, (data) => _state.thermostat = data[0]);
+          } else if (characteristic.uuid == _pumpStatusGuid) {
+            _subscribe(
+                characteristic, (data) => _state.pumpStatus = data[0] == 1);
+          } else if (characteristic.uuid == _heaterStatusGuid) {
+            _subscribe(
+                characteristic, (data) => _state.heaterStatus = data[0] == 1);
           }
         });
+        _loadInitial();
       }
     });
   }
 
-  _subscribe(
-      BluetoothCharacteristic characteristic, void onData(List<int> data)) async {
-    // Get initial value.
-    await data = device.readCharacteristic(characteristic);
+  _loadInitial() async {
+    var airTempData =
+        await device.readCharacteristic(_characteristics[_airTempGuid]);
+    var waterTempData =
+        await device.readCharacteristic(_characteristics[_waterTempGuid]);
+    var pumpManualData =
+        await device.readCharacteristic(_characteristics[_pumpManualGuid]);
+    var heaterManualData =
+        await device.readCharacteristic(_characteristics[_heaterManualGuid]);
+    var thermostatData =
+        await device.readCharacteristic(_characteristics[_thermostatGuid]);
+    var pumpStatusData =
+        await device.readCharacteristic(_characteristics[_pumpStatusGuid]);
+    var heaterStatusData =
+        await device.readCharacteristic(_characteristics[_heaterStatusGuid]);
 
+    _state.airTemp = airTempData[0];
+    _state.waterTemp = waterTempData[0];
+    _state.pumpManual = pumpManualData[0] == 1;
+    _state.heaterManual = heaterManualData[0] == 1;
+    _state.thermostat = thermostatData[0];
+    _state.pumpStatus = pumpStatusData[0] == 1;
+    _state.heaterStatus = heaterStatusData[0] == 1;
+    loading = false;
+  }
+
+  _subscribe(
+      BluetoothCharacteristic characteristic, void onData(List<int> data)) {
     // Make sure characteristic is set to notify.
     device.setNotifyValue(characteristic, true);
 
@@ -63,18 +97,18 @@ class ControlUnit {
   }
 
   void togglePump() {
-    _state.pumpOn = !_state.pumpOn;
+    _state.pumpManual = !_state.pumpManual;
 
     device.writeCharacteristic(
-        _characteristics[_pumpOnGuid], [_state.pumpOn ? 1 : 0],
+        _characteristics[_pumpManualGuid], [_state.pumpManual ? 1 : 0],
         type: CharacteristicWriteType.withResponse);
     _streamController.add(_state);
   }
 
   void toggleHeater() {
-    _state.heaterOn = !_state.heaterOn;
+    _state.heaterManual = !_state.heaterManual;
     device.writeCharacteristic(
-        _characteristics[_heaterOnGuid], [_state.heaterOn ? 1 : 0],
+        _characteristics[_heaterManualGuid], [_state.heaterManual ? 1 : 0],
         type: CharacteristicWriteType.withResponse);
     _streamController.add(_state);
   }

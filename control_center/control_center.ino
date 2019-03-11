@@ -43,21 +43,28 @@ Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_
 
 int32_t pcWaterTempCharId;
 int32_t pcAirTempCharId;
-int32_t pcPumpOnCharId;
-int32_t pcHeaterOnCharId;
+int32_t pcPumpManualCharId;
+int32_t pcHeaterManualCharId;
 int32_t pcThermostatCharId;
+int32_t pcPumpStatusCharId;
+int32_t pcHeaterStatusCharId;
 
 // == Globals ==
 unsigned long loopTime = 0;
 unsigned long lastTime;
 float waterTemp = 0;
 float airTemp = 0;
+bool pumpManual = true;
+bool heaterManual = true;
+
 bool pumpOn = true;
 bool heaterOn = true;
 int thermostat = 75;
 
 void setup()
 {
+  while (!Serial)
+    ;
   Serial.begin(115200);
   setupAirTemp();
   setupRelays();
@@ -148,7 +155,8 @@ void registerCharacteristic(char uuid[], char properties[], int value, int32_t *
   Serial.print(uuid);
   Serial.println(F("): "));
 
-  char command[80];
+  // Make sure buffer is large enough for full command!
+  char command[100];
   sprintf(command, "AT+GATTADDCHAR=UUID=%s, PROPERTIES=%s, MIN_LEN=1, MAX_LEN=1, DATATYPE=3, VALUE=%d", uuid, properties, value);
   Serial.println(command);
   success = ble.sendCommandWithIntReply(command, charId);
@@ -160,38 +168,23 @@ void registerCharacteristic(char uuid[], char properties[], int value, int32_t *
 
 void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
 {
-  Serial.print(F("Got some new data! "));
-  Serial.println(charId);
-
   if (len == 0)
   {
     return;
   }
 
-  if (charId == pcPumpOnCharId)
+  if (charId == pcPumpManualCharId)
   {
-    pumpOn = data[0] == 1;
-    if (heaterOn && !pumpOn)
-    {
-      heaterOn = false;
-      updateChar(pcHeaterOnCharId, (int)heaterOn);
-    }
+    pumpManual = data[0] == 1;
   }
-  else if (charId == pcHeaterOnCharId)
+  else if (charId == pcHeaterManualCharId)
   {
-    heaterOn = data[0] == 1;
-    if (heaterOn)
-    {
-      pumpOn = true;
-      updateChar(pcPumpOnCharId, (int)pumpOn);
-    }
+    heaterManual = data[0] == 1;
   }
   else if (charId == pcThermostatCharId)
   {
     thermostat = data[0];
   }
-  digitalWrite(PUMP_RELAY, pumpOn);
-  digitalWrite(HEATER_RELAY, heaterOn);
 }
 
 void setupBle()
@@ -247,14 +240,20 @@ void setupBle()
   /* Add the Pool Controller Air Temp characteristic */
   registerCharacteristic("0x8271", "0x12", (int)airTemp, &pcAirTempCharId);
 
-  /* Add the Pool Controller Pump On characteristic */
-  registerCharacteristic("0x8272", "0x1E", pumpOn == 1, &pcPumpOnCharId);
+  /* Add the Pool Controller Pump Enable characteristic */
+  registerCharacteristic("0x8272", "0x1E", pumpOn == 1, &pcPumpManualCharId);
 
-  /* Add the Pool Controller Heater On characteristic */
-  registerCharacteristic("0x8273", "0x1E", heaterOn == 1, &pcHeaterOnCharId);
+  /* Add the Pool Controller Heater Enable characteristic */
+  registerCharacteristic("0x8273", "0x1E", heaterOn == 1, &pcHeaterManualCharId);
 
   /* Add the Pool Controller Thermostat characteristic */
   registerCharacteristic("0x8274", "0x1E", thermostat, &pcThermostatCharId);
+
+  /* Add the Pool Controller Pump Status characteristic */
+  registerCharacteristic("0x8275", "0x12", pumpOn == 1, &pcPumpStatusCharId);
+
+  /* Add the Pool Controller Heater Status characteristic */
+  registerCharacteristic("0x8276", "0x12", heaterOn == 1, &pcHeaterStatusCharId);
 
   /* Add the Heart Rate Service to the advertising data */
   Serial.println(F("Adding Pool Control Center Service UUID to the advertising payload: "));
@@ -263,8 +262,8 @@ void setupBle()
   Serial.println(F("Performing a SW reset (service changes require a reset): "));
   ble.reset();
 
-  ble.setBleGattRxCallback(pcPumpOnCharId, BleGattRX);
-  ble.setBleGattRxCallback(pcHeaterOnCharId, BleGattRX);
+  ble.setBleGattRxCallback(pcPumpManualCharId, BleGattRX);
+  ble.setBleGattRxCallback(pcHeaterManualCharId, BleGattRX);
   ble.setBleGattRxCallback(pcThermostatCharId, BleGattRX);
 }
 
@@ -289,10 +288,18 @@ void updateChar(int32_t charId, int value)
 
 void sendData()
 {
-  Serial.println("Sending new data!");
-
   updateChar(pcWaterTempCharId, (int)waterTemp);
   updateChar(pcAirTempCharId, (int)airTemp);
+  updateChar(pcPumpStatusCharId, (int)pumpOn);
+  updateChar(pcHeaterStatusCharId, (int)heaterOn);
+}
+
+void updateState()
+{
+  heaterOn = heaterManual && (waterTemp < thermostat - 1);
+  pumpOn = pumpManual || heaterOn;
+  digitalWrite(PUMP_RELAY, pumpOn);
+  digitalWrite(HEATER_RELAY, heaterOn);
 }
 
 uint8_t data[] = "ack";
@@ -309,14 +316,7 @@ void loop()
     {
       buf[len] = 0; // zero out remaining string
 
-      Serial.print(F("Got packet from #"));
-      Serial.print(from);
-      Serial.print(F(" [RSSI :"));
-      Serial.print(rf69.lastRssi());
-      Serial.print(F("] Temp: "));
       memcpy((uint8_t *)&waterTemp, buf, 4);
-      Serial.print(waterTemp);
-      Serial.println();
 
       // Send a reply back to the originator client
       if (!rf69_manager.sendtoWait(data, sizeof(data), from))
@@ -326,12 +326,14 @@ void loop()
 
   loopTime += millis() - lastTime;
   lastTime = millis();
-  if (loopTime > 3000)
+  if (loopTime > 500)
   {
     loopTime = 0;
     getAirTemp();
+    updateState();
     sendData();
   }
 
   ble.update(200);
+  delay(1);
 }

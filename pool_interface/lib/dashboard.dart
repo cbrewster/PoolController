@@ -29,7 +29,7 @@ class Dashboard extends StatelessWidget {
           stream: controlUnit.poolState(),
           builder: (context, poolState) {
             // If loading or poolState is null, show loading indicator.
-            if (poolState.data?.isLoading() ?? true) {
+            if (poolState.data == null || controlUnit.loading) {
               return Center(
                 child: CircularProgressIndicator(),
               );
@@ -81,12 +81,14 @@ class ControllerStatus extends StatelessWidget {
   ControllerStatus(
       {this.auto,
       this.enabled,
+      this.status,
       this.name,
       this.onStatusChange,
       this.onModeChange});
 
   final bool auto;
   final bool enabled;
+  final bool status;
   final String name;
 
   final ValueChanged<bool> onStatusChange;
@@ -110,10 +112,10 @@ class ControllerStatus extends StatelessWidget {
                 child: CustomPaint(
                   size: Size(14.0, 14.0),
                   foregroundPainter:
-                      new Indicator(color: enabled ? Colors.green : Colors.red),
+                      new Indicator(color: status ? Colors.green : Colors.red),
                 )),
             Text(
-              enabled ? "ENABLED" : "DISABLED",
+              status ? "ENABLED" : "DISABLED",
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
           ])),
@@ -156,7 +158,8 @@ class _PoolStatusState extends State<PoolStatus> {
     return Column(children: [
       ControllerStatus(
         auto: _pumpAuto,
-        enabled: widget.poolState.pumpOn ?? false,
+        enabled: widget.poolState.pumpManual,
+        status: widget.poolState.pumpStatus,
         name: "Water Pump",
         onStatusChange: (_value) => widget.controlUnit.togglePump(),
         onModeChange: (value) {
@@ -167,7 +170,8 @@ class _PoolStatusState extends State<PoolStatus> {
       ),
       ControllerStatus(
         auto: _heaterAuto,
-        enabled: widget.poolState.heaterOn ?? false,
+        enabled: widget.poolState.heaterManual,
+        status: widget.poolState.heaterStatus,
         name: "Water Heater",
         onStatusChange: (_value) => widget.controlUnit.toggleHeater(),
         onModeChange: (value) {
