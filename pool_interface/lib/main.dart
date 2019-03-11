@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:pool_interface/search.dart';
+import 'package:pool_interface/bluetooth.dart';
 
 void main() => runApp(MyApp());
 
@@ -10,11 +10,7 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'Pool Controller',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: DefaultTabController(
-          length: 2,
-          child: Search(
-            title: "Select Controller",
-          )),
+      home: DefaultTabController(length: 2, child: Bluetooth()),
     );
   }
 }

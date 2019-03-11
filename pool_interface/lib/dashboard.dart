@@ -1,60 +1,50 @@
 import 'package:flutter/material.dart';
 import 'package:pool_interface/indicator.dart';
+import 'package:pool_interface/control_unit.dart';
+import 'package:pool_interface/pool_state.dart';
 import 'dart:async';
 
-class PoolInfo {
-  PoolInfo();
+class Dashboard extends StatelessWidget {
+  Dashboard({this.controlUnit});
 
-  int waterTemp;
-  int airTemp;
-  int thermostat;
-  bool pumpOn;
-  bool heaterOn;
-
-  VoidCallback toggleHeater;
-  VoidCallback togglePump;
-  VoidCallback increaseThermostat;
-  VoidCallback decreaseThermostat;
-
-  bool isLoading() {
-    return waterTemp == null ||
-        airTemp == null ||
-        pumpOn == null ||
-        heaterOn == null ||
-        thermostat == null;
-  }
-}
-
-class PoolController extends StatelessWidget {
-  PoolController({this.poolInfo});
-
-  final PoolInfo poolInfo;
+  final ControlUnit controlUnit;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        bottom: TabBar(
-          tabs: <Widget>[
-            Tab(
-              text: "Dashboard",
-            ),
-            Tab(
-              text: "Schedule",
-            )
-          ],
-        ),
-        title: const Text("Pool Controller"),
-      ),
-      body: TabBarView(
-        children: <Widget>[
-          Dashboard(
-            poolInfo: poolInfo,
+        appBar: AppBar(
+          bottom: TabBar(
+            tabs: <Widget>[
+              Tab(
+                text: "Dashboard",
+              ),
+              Tab(
+                text: "Schedule",
+              )
+            ],
           ),
-          ScheduleWidget()
-        ],
-      ),
-    );
+          title: const Text("Pool Controller"),
+        ),
+        body: StreamBuilder(
+          stream: controlUnit.poolState(),
+          builder: (context, poolState) {
+            // If loading or poolState is null, show loading indicator.
+            if (poolState.data?.isLoading() ?? true) {
+              return Center(
+                child: CircularProgressIndicator(),
+              );
+            }
+            return TabBarView(
+              children: <Widget>[
+                PoolStatus(
+                  controlUnit: controlUnit,
+                  poolState: poolState.data,
+                ),
+                ScheduleWidget()
+              ],
+            );
+          },
+        ));
   }
 }
 
@@ -147,16 +137,17 @@ class ControllerStatus extends StatelessWidget {
   }
 }
 
-class Dashboard extends StatefulWidget {
-  Dashboard({Key key, this.poolInfo}) : super(key: key);
+class PoolStatus extends StatefulWidget {
+  PoolStatus({Key key, this.poolState, this.controlUnit}) : super(key: key);
 
-  final PoolInfo poolInfo;
+  final PoolState poolState;
+  final ControlUnit controlUnit;
 
   @override
-  _DashboardState createState() => _DashboardState();
+  _PoolStatusState createState() => _PoolStatusState();
 }
 
-class _DashboardState extends State<Dashboard> {
+class _PoolStatusState extends State<PoolStatus> {
   bool _pumpAuto = true;
   bool _heaterAuto = true;
 
@@ -165,13 +156,9 @@ class _DashboardState extends State<Dashboard> {
     return Column(children: [
       ControllerStatus(
         auto: _pumpAuto,
-        enabled: widget.poolInfo.pumpOn ?? false,
+        enabled: widget.poolState.pumpOn ?? false,
         name: "Water Pump",
-        onStatusChange: (value) {
-          setState(() {
-            (widget.poolInfo.togglePump)();
-          });
-        },
+        onStatusChange: (_value) => widget.controlUnit.togglePump(),
         onModeChange: (value) {
           setState(() {
             _pumpAuto = value;
@@ -180,13 +167,9 @@ class _DashboardState extends State<Dashboard> {
       ),
       ControllerStatus(
         auto: _heaterAuto,
-        enabled: widget.poolInfo.heaterOn ?? false,
+        enabled: widget.poolState.heaterOn ?? false,
         name: "Water Heater",
-        onStatusChange: (value) {
-          setState(() {
-            (widget.poolInfo.toggleHeater)();
-          });
-        },
+        onStatusChange: (_value) => widget.controlUnit.toggleHeater(),
         onModeChange: (value) {
           setState(() {
             _heaterAuto = value;
@@ -210,14 +193,11 @@ class _DashboardState extends State<Dashboard> {
                           children: <Widget>[
                             RaisedButton(
                               child: const Icon(Icons.remove),
-                              onPressed: () {
-                                setState(() {
-                                  widget.poolInfo.decreaseThermostat();
-                                });
-                              },
+                              onPressed: () =>
+                                  widget.controlUnit.decreaseThermostat(),
                             ),
                             Text(
-                              "${widget.poolInfo.thermostat} ºF",
+                              "${widget.poolState.thermostat} ºF",
                               style: TextStyle(
                                 fontSize: 40,
                                 fontWeight: FontWeight.bold,
@@ -225,11 +205,8 @@ class _DashboardState extends State<Dashboard> {
                             ),
                             RaisedButton(
                               child: const Icon(Icons.add),
-                              onPressed: () {
-                                setState(() {
-                                  widget.poolInfo.increaseThermostat();
-                                });
-                              },
+                              onPressed: () =>
+                                  widget.controlUnit.increaseThermostat(),
                             ),
                           ],
                         )),
@@ -238,13 +215,13 @@ class _DashboardState extends State<Dashboard> {
           child: DataDisplay(
         label: "Water Temperature",
         value:
-            "${widget.poolInfo.waterTemp != null ? widget.poolInfo.waterTemp : "?"} ºF",
+            "${widget.poolState.waterTemp != null ? widget.poolState.waterTemp : "?"} ºF",
       )),
       Flexible(
           child: DataDisplay(
         label: "Air Temperature",
         value:
-            "${widget.poolInfo.airTemp != null ? widget.poolInfo.airTemp : "?"} ºF",
+            "${widget.poolState.airTemp != null ? widget.poolState.airTemp : "?"} ºF",
       )),
     ]);
   }
