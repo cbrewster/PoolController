@@ -130,6 +130,8 @@ class _BluetoothState extends State<Bluetooth> {
     deviceConnection?.cancel();
     deviceConnection = null;
     setState(() {
+      _controlUnit?.dispose();
+      _controlUnit = null;
       device = null;
     });
   }

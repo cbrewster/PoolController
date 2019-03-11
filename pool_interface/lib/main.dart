@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:pool_interface/bluetooth.dart';
 
-void main() => runApp(MyApp());
+void main() => runApp(PoolControllerApp());
 
-class MyApp extends StatelessWidget {
+class PoolControllerApp extends StatelessWidget {
   // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {

@@ -63,8 +63,8 @@ int thermostat = 75;
 
 void setup()
 {
-  while (!Serial)
-    ;
+  // while (!Serial)
+  //   ;
   Serial.begin(115200);
   setupAirTemp();
   setupRelays();
@@ -240,10 +240,10 @@ void setupBle()
   /* Add the Pool Controller Air Temp characteristic */
   registerCharacteristic("0x8271", "0x12", (int)airTemp, &pcAirTempCharId);
 
-  /* Add the Pool Controller Pump Enable characteristic */
+  /* Add the Pool Controller Pump Manual characteristic */
   registerCharacteristic("0x8272", "0x1E", pumpOn == 1, &pcPumpManualCharId);
 
-  /* Add the Pool Controller Heater Enable characteristic */
+  /* Add the Pool Controller Heater Manual characteristic */
   registerCharacteristic("0x8273", "0x1E", heaterOn == 1, &pcHeaterManualCharId);
 
   /* Add the Pool Controller Thermostat characteristic */
@@ -334,6 +334,7 @@ void loop()
     sendData();
   }
 
+  // Must call update to process the Rx callbacks.
   ble.update(200);
   delay(1);
 }
