@@ -5,9 +5,10 @@ import 'package:pool_interface/pool_state.dart';
 import 'dart:async';
 
 class Dashboard extends StatelessWidget {
-  Dashboard({this.controlUnit});
+  Dashboard({this.controlUnit, this.disconnect});
 
   final ControlUnit controlUnit;
+  final VoidCallback disconnect;
 
   @override
   Widget build(BuildContext context) {
@@ -24,6 +25,12 @@ class Dashboard extends StatelessWidget {
             ],
           ),
           title: const Text("Pool Controller"),
+          actions: <Widget>[
+            IconButton(
+              icon: Icon(Icons.cancel),
+              onPressed: () => disconnect(),
+            )
+          ],
         ),
         body: StreamBuilder(
           stream: controlUnit.poolState(),
@@ -84,18 +91,31 @@ class ControllerStatus extends StatelessWidget {
       this.status,
       this.name,
       this.onStatusChange,
-      this.onModeChange});
+      this.onModeChange,
+      this.timestamp});
 
   final bool auto;
   final bool enabled;
   final bool status;
   final String name;
+  final DateTime timestamp;
 
   final ValueChanged<bool> onStatusChange;
   final ValueChanged<bool> onModeChange;
 
+  String _twoDigits(int n) {
+    if (n >= 10) return "$n";
+    return "0$n";
+  }
+
   @override
   Widget build(BuildContext context) {
+    final now = DateTime.now();
+    final timeOn = now.difference(timestamp);
+    final hours = timeOn.inHours;
+    final minutes = timeOn.inMinutes % 60;
+    final seconds = timeOn.inSeconds % 60;
+
     return SingleChildScrollView(
         child: Column(children: [
       Container(
@@ -106,6 +126,9 @@ class ControllerStatus extends StatelessWidget {
               name,
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
             ),
+            Spacer(),
+            Text(
+                "${_twoDigits(hours)}:${_twoDigits(minutes)}:${_twoDigits(seconds)}"),
             Spacer(),
             Padding(
                 padding: EdgeInsets.all(5.0),
@@ -160,6 +183,7 @@ class _PoolStatusState extends State<PoolStatus> {
         auto: _pumpAuto,
         enabled: widget.poolState.pumpManual,
         status: widget.poolState.pumpStatus,
+        timestamp: widget.poolState.pumpTimestamp,
         name: "Water Pump",
         onStatusChange: (_value) => widget.controlUnit.togglePump(),
         onModeChange: (value) {
@@ -172,6 +196,7 @@ class _PoolStatusState extends State<PoolStatus> {
         auto: _heaterAuto,
         enabled: widget.poolState.heaterManual,
         status: widget.poolState.heaterStatus,
+        timestamp: widget.poolState.heaterTimestamp,
         name: "Water Heater",
         onStatusChange: (_value) => widget.controlUnit.toggleHeater(),
         onModeChange: (value) {

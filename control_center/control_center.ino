@@ -4,10 +4,12 @@
 #include "BluefruitConfig.h"
 #include "Adafruit_BLE.h"
 #include "Adafruit_BluefruitLE_SPI.h"
-#include "Adafruit_BluefruitLE_UART.h"
 #include "BluefruitConfig.h"
-#include <Wire.h>
 #include "Adafruit_MCP9808.h"
+#include "RTClib.h"
+
+// == RTC ==
+RTC_PCF8523 rtc;
 
 // == AIR TEMP SETUP ==
 Adafruit_MCP9808 airTempSensor = Adafruit_MCP9808();
@@ -39,7 +41,6 @@ Adafruit_BluefruitLE_SPI ble(BLUEFRUIT_SPI_CS, BLUEFRUIT_SPI_IRQ, BLUEFRUIT_SPI_
 // Disable this in production
 #define FACTORYRESET_ENABLE 1
 #define MINIMUM_FIRMWARE_VERSION "0.7.0"
-#define DBG_ENABLE 1
 
 int32_t pcWaterTempCharId;
 int32_t pcAirTempCharId;
@@ -48,6 +49,9 @@ int32_t pcHeaterManualCharId;
 int32_t pcThermostatCharId;
 int32_t pcPumpStatusCharId;
 int32_t pcHeaterStatusCharId;
+int32_t pcPumpTimestampCharId;
+int32_t pcHeaterTimerstampCharId;
+int32_t pcTimeCharId;
 
 // == Globals ==
 unsigned long loopTime = 0;
@@ -56,10 +60,12 @@ float waterTemp = 0;
 float airTemp = 0;
 bool pumpManual = true;
 bool heaterManual = true;
+int32_t pumpTimestamp;
+int32_t heaterTimestamp;
 
 bool pumpOn = true;
 bool heaterOn = true;
-int thermostat = 75;
+uint8_t thermostat = 75;
 
 void setup()
 {
@@ -69,14 +75,29 @@ void setup()
   setupAirTemp();
   setupRelays();
   setupRadio();
+  setupRTC();
   setupBle();
+}
+
+void setupRTC()
+{
+  if (!rtc.begin())
+  {
+    while (1)
+      ;
+  }
+
+  if (!rtc.initialized())
+  {
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
 }
 
 void setupAirTemp()
 {
   if (!airTempSensor.begin(0x18))
   {
-    Serial.println(F("Couldn't find MCP9808! Check your connections and verify the address is correct."));
+    error(F("Couldn't find MCP9808! Check your connections and verify the address is correct."));
     while (1)
       ;
   }
@@ -100,9 +121,6 @@ void setupRadio()
   pinMode(RFM69_RST, OUTPUT);
   digitalWrite(RFM69_RST, LOW);
 
-  Serial.println(F("Feather Addressed RFM69 RX Test!"));
-  Serial.println();
-
   // manual reset
   digitalWrite(RFM69_RST, HIGH);
   delay(10);
@@ -111,16 +129,15 @@ void setupRadio()
 
   if (!rf69_manager.init())
   {
-    Serial.println(F("RFM69 radio init failed"));
+    error(F("RFM69 radio init failed"));
     while (1)
       ;
   }
-  Serial.println(F("RFM69 radio init OK!"));
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM (for low power module)
   // No encryption
   if (!rf69.setFrequency(RF69_FREQ))
   {
-    Serial.println(F("setFrequency failed"));
+    error(F("setFrequency failed"));
   }
 
   // If you are using a high power RF69 eg RFM69HW, you *must* set a Tx power with the
@@ -131,39 +148,14 @@ void setupRadio()
   uint8_t key[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
   rf69.setEncryptionKey(key);
-
-  Serial.print(F("RFM69 radio @"));
-  Serial.print((int)RF69_FREQ);
-  Serial.println(F(" MHz"));
 }
 
 // A small helper
 void error(const __FlashStringHelper *err)
 {
-  Serial.println(err);
+  // Serial.println(err);
   while (1)
     ;
-}
-
-// Sets up a new characteristic with the given UUID, Properties, and puts the result characteristic
-// id in `charId`.
-void registerCharacteristic(char uuid[], char properties[], int value, int32_t *charId)
-{
-  boolean success;
-
-  Serial.print(F("Adding the Pool Controller characteristic (UUID = "));
-  Serial.print(uuid);
-  Serial.println(F("): "));
-
-  // Make sure buffer is large enough for full command!
-  char command[100];
-  sprintf(command, "AT+GATTADDCHAR=UUID=%s, PROPERTIES=%s, MIN_LEN=1, MAX_LEN=1, DATATYPE=3, VALUE=%d", uuid, properties, value);
-  Serial.println(command);
-  success = ble.sendCommandWithIntReply(command, charId);
-  if (!success)
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
 }
 
 void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
@@ -185,24 +177,25 @@ void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
   {
     thermostat = data[0];
   }
+  else if (charId == pcTimeCharId)
+  {
+    int32_t *newTime = (int32_t *)data;
+    rtc.adjust(*newTime);
+  }
 }
 
 void setupBle()
 {
   boolean success;
 
-  Serial.print(F("Initialising the Bluefruit LE module: "));
-
   if (!ble.begin(false))
   {
     error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
   }
-  Serial.println(F("OK!"));
 
   if (FACTORYRESET_ENABLE)
   {
     /* Perform a factory reset to make sure everything is in a known state */
-    Serial.println(F("Performing a factory reset: "));
     if (!ble.factoryReset())
     {
       error(F("Couldn't factory reset"));
@@ -215,15 +208,12 @@ void setupBle()
   }
 
   /* Disable command echo from Bluefruit */
-  ble.echo(true);
+  ble.echo(false);
 
-  Serial.println(F("Requesting Bluefruit info:"));
   /* Print Bluefruit information */
-  ble.info();
+  // ble.info();
 
   /* Change the device name to make it easier to find */
-  Serial.println(F("Setting device name to 'Pool Control Center': "));
-
   if (!ble.sendCommandCheckOK(F("AT+GAPDEVNAME=Pool Control Center")))
   {
     error(F("Could not set device name?"));
@@ -231,73 +221,146 @@ void setupBle()
 
   /* Add the Heart Rate Service definition */
   /* Service ID should be 1 */
-  Serial.println(F("Adding the Pool Controller Service definition (UUID = 0x308E): "));
   success = ble.sendCommandCheckOK(F("AT+GATTADDSERVICE=UUID=0x308E"));
 
   /* Add the Pool Controller Water Temp characteristic */
-  registerCharacteristic("0x8270", "0x12", (int)waterTemp, &pcWaterTempCharId);
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8270, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcWaterTempCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
 
   /* Add the Pool Controller Air Temp characteristic */
-  registerCharacteristic("0x8271", "0x12", (int)airTemp, &pcAirTempCharId);
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8271, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcAirTempCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
 
   /* Add the Pool Controller Pump Manual characteristic */
-  registerCharacteristic("0x8272", "0x1E", pumpOn == 1, &pcPumpManualCharId);
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8272, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcPumpManualCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
 
   /* Add the Pool Controller Heater Manual characteristic */
-  registerCharacteristic("0x8273", "0x1E", heaterOn == 1, &pcHeaterManualCharId);
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8273, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcHeaterManualCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
 
   /* Add the Pool Controller Thermostat characteristic */
-  registerCharacteristic("0x8274", "0x1E", thermostat, &pcThermostatCharId);
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8274, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=75"), &pcThermostatCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
 
   /* Add the Pool Controller Pump Status characteristic */
-  registerCharacteristic("0x8275", "0x12", pumpOn == 1, &pcPumpStatusCharId);
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8275, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcPumpStatusCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
 
   /* Add the Pool Controller Heater Status characteristic */
-  registerCharacteristic("0x8276", "0x12", heaterOn == 1, &pcHeaterStatusCharId);
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8276, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcHeaterStatusCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
+
+  /* Add the Pool Controller Pump Timestamp characteristic */
+  pumpTimestamp = rtc.now().unixtime();
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8277, PROPERTIES=0x12, MIN_LEN=4, MAX_LEN=4"), &pcPumpTimestampCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
+
+  /* Add the Pool Controller Heater Timestamp characteristic */
+  heaterTimestamp = rtc.now().unixtime();
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8278, PROPERTIES=0x12, MIN_LEN=4, MAX_LEN=4"), &pcHeaterTimerstampCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
+
+  /* Add the Pool Controller Current Time characteristic */
+  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8279, PROPERTIES=0x1E, MIN_LEN=4, MAX_LEN=4"), &pcTimeCharId))
+  {
+    error(F("Could not add pool controller characteristic"));
+  }
 
   /* Add the Heart Rate Service to the advertising data */
-  Serial.println(F("Adding Pool Control Center Service UUID to the advertising payload: "));
   ble.sendCommandCheckOK(F("AT+GAPSETADVDATA=03-02-8E-30"));
   /* Reset the device for the new service setting changes to take effect */
-  Serial.println(F("Performing a SW reset (service changes require a reset): "));
   ble.reset();
 
   ble.setBleGattRxCallback(pcPumpManualCharId, BleGattRX);
   ble.setBleGattRxCallback(pcHeaterManualCharId, BleGattRX);
   ble.setBleGattRxCallback(pcThermostatCharId, BleGattRX);
+  ble.setBleGattRxCallback(pcTimeCharId, BleGattRX);
 }
 
 void getAirTemp()
 {
   airTemp = airTempSensor.readTempF();
-  Serial.println(airTemp);
 }
 
-void updateChar(int32_t charId, int value)
+void updateChar(int32_t charId, int32_t value)
 {
   ble.print(F("AT+GATTCHAR="));
   ble.print(charId);
   ble.print(F(","));
-  ble.println((int)value);
+  ble.println(value);
 
   if (!ble.waitForOK())
   {
-    Serial.println(F("Failed to get response!"));
+    error(F("Failed to get response!"));
   }
 }
 
 void sendData()
 {
-  updateChar(pcWaterTempCharId, (int)waterTemp);
-  updateChar(pcAirTempCharId, (int)airTemp);
-  updateChar(pcPumpStatusCharId, (int)pumpOn);
-  updateChar(pcHeaterStatusCharId, (int)heaterOn);
+  updateChar(pcWaterTempCharId, (int32_t)waterTemp);
+  updateChar(pcAirTempCharId, (int32_t)airTemp);
+  updateChar(pcPumpStatusCharId, (int32_t)pumpOn);
+  updateChar(pcHeaterStatusCharId, (int32_t)heaterOn);
+  updateChar(pcPumpTimestampCharId, pumpTimestamp);
+  updateChar(pcHeaterTimerstampCharId, heaterTimestamp);
+  Serial.println(pumpTimestamp);
 }
 
 void updateState()
 {
-  heaterOn = heaterManual && (waterTemp < thermostat - 1);
+  bool oldPumpOn = pumpOn;
+  bool oldHeaterOn = heaterOn;
+
+  if (heaterOn)
+  {
+    // If the heater has been on, wait to heat until the thermostat temperature is met.
+    heaterOn = heaterManual && (waterTemp < thermostat);
+  }
+  else
+  {
+    // If the heater has been off, wait until we are at least 2 degrees below the set temperature
+    // to turn back on.
+    heaterOn = heaterManual && (waterTemp < thermostat - 1);
+  }
+
+  // Pump will be on if the manual control is set or if the heater is enabled.
   pumpOn = pumpManual || heaterOn;
+
+  // Check if state changed
+  if (oldPumpOn != pumpOn)
+  {
+    pumpTimestamp = rtc.now().unixtime();
+    Serial.print("Pump Timestamp: ");
+    Serial.println(pumpTimestamp);
+  }
+
+  // Check if state changed
+  if (oldHeaterOn != heaterOn)
+  {
+    heaterTimestamp = rtc.now().unixtime();
+    Serial.print("Heater Timestamp: ");
+    Serial.println(heaterTimestamp);
+  }
+
   digitalWrite(PUMP_RELAY, pumpOn);
   digitalWrite(HEATER_RELAY, heaterOn);
 }
@@ -320,7 +383,7 @@ void loop()
 
       // Send a reply back to the originator client
       if (!rf69_manager.sendtoWait(data, sizeof(data), from))
-        Serial.println(F("Sending failed (no ack)"));
+        error(F("Sending failed (no ack)"));
     }
   }
 

@@ -2,6 +2,7 @@ import 'package:flutter_blue/flutter_blue.dart';
 import 'package:pool_interface/pool_state.dart';
 import 'dart:async';
 import 'dart:math';
+import 'dart:typed_data';
 
 Guid poolServiceGuid = Guid("0000308E-0000-1000-8000-00805F9B34FB");
 Guid _waterTempGuid = Guid("00008270-0000-1000-8000-00805F9B34FB");
@@ -11,10 +12,14 @@ Guid _heaterManualGuid = Guid("00008273-0000-1000-8000-00805F9B34FB");
 Guid _thermostatGuid = Guid("00008274-0000-1000-8000-00805F9B34FB");
 Guid _pumpStatusGuid = Guid("00008275-0000-1000-8000-00805F9B34FB");
 Guid _heaterStatusGuid = Guid("00008276-0000-1000-8000-00805F9B34FB");
+Guid _pumpTimestampGuid = Guid("00008277-0000-1000-8000-00805F9B34FB");
+Guid _heaterTimestampGuid = Guid("00008278-0000-1000-8000-00805F9B34FB");
+Guid _timeGuid = Guid("00008279-0000-1000-8000-00805F9B34FB");
 
 class ControlUnit {
   final BluetoothDevice device;
   final PoolState _state = PoolState();
+  Timer _updateTimer;
 
   final Map<Guid, StreamSubscription> _charSubscriptions = {};
   final StreamController<PoolState> _streamController = StreamController();
@@ -23,8 +28,21 @@ class ControlUnit {
 
   Stream<PoolState> poolState() => _streamController.stream;
 
+  _parseTimestamp(List<int> data) {
+    final seconds = _fromBytesToInt32(data);
+    final dateTime = new DateTime.fromMillisecondsSinceEpoch((seconds) * 1000);
+    return dateTime;
+  }
+
+  _fromBytesToInt32(List<int> data) {
+    final bytes = Int8List.fromList(data);
+    final byteData = ByteData.view(bytes.buffer);
+    return byteData.getInt32(0, Endian.little);
+  }
+
   ControlUnit({this.device}) {
     _streamController.add(_state);
+
     device.discoverServices().then((services) {
       var poolService =
           services.firstWhere((service) => service.uuid == poolServiceGuid);
@@ -50,28 +68,56 @@ class ControlUnit {
           } else if (characteristic.uuid == _heaterStatusGuid) {
             _subscribe(
                 characteristic, (data) => _state.heaterStatus = data[0] == 1);
+          } else if (characteristic.uuid == _pumpTimestampGuid) {
+            _subscribe(characteristic,
+                (data) => _state.pumpTimestamp = _parseTimestamp(data));
+          } else if (characteristic.uuid == _heaterTimestampGuid) {
+            _subscribe(characteristic,
+                (data) => _state.heaterTimestamp = _parseTimestamp(data));
           }
         });
         _loadInitial();
       }
     });
+    _updateTimer = Timer.periodic(
+        Duration(seconds: 1), (_) => _streamController.add(_state));
+  }
+
+  _getCharacteristic(BluetoothCharacteristic char) async {
+    var data;
+    while (data == null) {
+      data = await device.readCharacteristic(char);
+    }
+    return data;
   }
 
   _loadInitial() async {
-    var airTempData =
-        await device.readCharacteristic(_characteristics[_airTempGuid]);
+    final time = DateTime.now();
+    final int seconds = time.millisecondsSinceEpoch ~/ 1000;
+    final data = ByteData(4);
+    data.setInt32(0, seconds, Endian.little);
+
+    await device.writeCharacteristic(
+        _characteristics[_timeGuid], data.buffer.asUint8List().toList(),
+        type: CharacteristicWriteType.withResponse);
+
+    var airTempData = await _getCharacteristic(_characteristics[_airTempGuid]);
     var waterTempData =
-        await device.readCharacteristic(_characteristics[_waterTempGuid]);
+        await _getCharacteristic(_characteristics[_waterTempGuid]);
     var pumpManualData =
-        await device.readCharacteristic(_characteristics[_pumpManualGuid]);
+        await _getCharacteristic(_characteristics[_pumpManualGuid]);
     var heaterManualData =
-        await device.readCharacteristic(_characteristics[_heaterManualGuid]);
+        await _getCharacteristic(_characteristics[_heaterManualGuid]);
     var thermostatData =
-        await device.readCharacteristic(_characteristics[_thermostatGuid]);
+        await _getCharacteristic(_characteristics[_thermostatGuid]);
     var pumpStatusData =
-        await device.readCharacteristic(_characteristics[_pumpStatusGuid]);
+        await _getCharacteristic(_characteristics[_pumpStatusGuid]);
     var heaterStatusData =
-        await device.readCharacteristic(_characteristics[_heaterStatusGuid]);
+        await _getCharacteristic(_characteristics[_heaterStatusGuid]);
+    var pumpTimestampData =
+        await _getCharacteristic(_characteristics[_pumpTimestampGuid]);
+    var heaterTimestampData =
+        await _getCharacteristic(_characteristics[_heaterTimestampGuid]);
 
     _state.airTemp = airTempData[0];
     _state.waterTemp = waterTempData[0];
@@ -80,6 +126,8 @@ class ControlUnit {
     _state.thermostat = thermostatData[0];
     _state.pumpStatus = pumpStatusData[0] == 1;
     _state.heaterStatus = heaterStatusData[0] == 1;
+    _state.pumpTimestamp = _parseTimestamp(pumpTimestampData);
+    _state.heaterTimestamp = _parseTimestamp(heaterTimestampData);
     loading = false;
   }
 
@@ -133,5 +181,6 @@ class ControlUnit {
     _charSubscriptions.forEach((uuid, sub) => sub.cancel());
     _charSubscriptions.clear();
     _streamController.close();
+    _updateTimer.cancel();
   }
 }

@@ -48,6 +48,8 @@ class _BluetoothState extends State<Bluetooth> {
   void initState() {
     super.initState();
 
+    _flutterBlue.setLogLevel(LogLevel.critical);
+
     _flutterBlue.state.then((s) {
       setState(() {
         state = s;
@@ -132,6 +134,7 @@ class _BluetoothState extends State<Bluetooth> {
     setState(() {
       _controlUnit?.dispose();
       _controlUnit = null;
+      deviceState = BluetoothDeviceState.disconnected;
       device = null;
     });
   }
@@ -194,8 +197,12 @@ class _BluetoothState extends State<Bluetooth> {
     switch (deviceState) {
       case BluetoothDeviceState.connected:
         {
+          if (_controlUnit == null) {
+            return _loading(context);
+          }
           return Dashboard(
             controlUnit: _controlUnit,
+            disconnect: () => _disconnect(),
           );
         }
       case BluetoothDeviceState.connecting:

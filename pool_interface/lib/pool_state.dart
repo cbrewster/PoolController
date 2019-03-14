@@ -1,5 +1,3 @@
-import 'package:flutter/material.dart';
-
 class PoolState {
   PoolState(
       {this.waterTemp,
@@ -13,6 +11,8 @@ class PoolState {
   int waterTemp;
   int airTemp;
   int thermostat;
+  DateTime pumpTimestamp;
+  DateTime heaterTimestamp;
   bool pumpManual;
   bool heaterManual;
   bool pumpStatus;
