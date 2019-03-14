@@ -54,8 +54,7 @@ int32_t pcHeaterTimerstampCharId;
 int32_t pcTimeCharId;
 
 // == Globals ==
-unsigned long loopTime = 0;
-unsigned long lastTime;
+int loopTime = 0;
 float waterTemp = 0;
 float airTemp = 0;
 bool pumpManual = true;
@@ -168,14 +167,17 @@ void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
   if (charId == pcPumpManualCharId)
   {
     pumpManual = data[0] == 1;
+    updateState();
   }
   else if (charId == pcHeaterManualCharId)
   {
     heaterManual = data[0] == 1;
+    updateState();
   }
   else if (charId == pcThermostatCharId)
   {
     thermostat = data[0];
+    updateState();
   }
   else if (charId == pcTimeCharId)
   {
@@ -318,11 +320,6 @@ void sendData()
 {
   updateChar(pcWaterTempCharId, (int32_t)waterTemp);
   updateChar(pcAirTempCharId, (int32_t)airTemp);
-  updateChar(pcPumpStatusCharId, (int32_t)pumpOn);
-  updateChar(pcHeaterStatusCharId, (int32_t)heaterOn);
-  updateChar(pcPumpTimestampCharId, pumpTimestamp);
-  updateChar(pcHeaterTimerstampCharId, heaterTimestamp);
-  Serial.println(pumpTimestamp);
 }
 
 void updateState()
@@ -349,16 +346,16 @@ void updateState()
   if (oldPumpOn != pumpOn)
   {
     pumpTimestamp = rtc.now().unixtime();
-    Serial.print("Pump Timestamp: ");
-    Serial.println(pumpTimestamp);
+    updateChar(pcPumpTimestampCharId, pumpTimestamp);
+    updateChar(pcPumpStatusCharId, (int32_t)pumpOn);
   }
 
   // Check if state changed
   if (oldHeaterOn != heaterOn)
   {
     heaterTimestamp = rtc.now().unixtime();
-    Serial.print("Heater Timestamp: ");
-    Serial.println(heaterTimestamp);
+    updateChar(pcHeaterTimerstampCharId, heaterTimestamp);
+    updateChar(pcHeaterStatusCharId, (int32_t)heaterOn);
   }
 
   digitalWrite(PUMP_RELAY, pumpOn);
@@ -380,21 +377,14 @@ void loop()
       buf[len] = 0; // zero out remaining string
 
       memcpy((uint8_t *)&waterTemp, buf, 4);
+      getAirTemp();
+      updateState();
+      sendData();
 
       // Send a reply back to the originator client
       if (!rf69_manager.sendtoWait(data, sizeof(data), from))
         error(F("Sending failed (no ack)"));
     }
-  }
-
-  loopTime += millis() - lastTime;
-  lastTime = millis();
-  if (loopTime > 500)
-  {
-    loopTime = 0;
-    getAirTemp();
-    updateState();
-    sendData();
   }
 
   // Must call update to process the Rx callbacks.

@@ -127,20 +127,36 @@ class ControllerStatus extends StatelessWidget {
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
             ),
             Spacer(),
-            Text(
-                "${_twoDigits(hours)}:${_twoDigits(minutes)}:${_twoDigits(seconds)}"),
-            Spacer(),
-            Padding(
-                padding: EdgeInsets.all(5.0),
-                child: CustomPaint(
-                  size: Size(14.0, 14.0),
-                  foregroundPainter:
-                      new Indicator(color: status ? Colors.green : Colors.red),
-                )),
-            Text(
-              status ? "ENABLED" : "DISABLED",
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Container(
+              padding: EdgeInsets.all(5),
+              width: 80,
+              decoration: BoxDecoration(
+                  color: Theme.of(context).primaryColor,
+                  borderRadius: BorderRadius.all(Radius.circular(4))),
+              child: Text(
+                "${_twoDigits(hours)}:${_twoDigits(minutes)}:${_twoDigits(seconds)}",
+                style: TextStyle(color: Colors.white),
+                textAlign: TextAlign.center,
+              ),
             ),
+            Spacer(),
+            Container(
+                width: 95,
+                child: Row(
+                  children: [
+                    Padding(
+                        padding: EdgeInsets.all(5.0),
+                        child: CustomPaint(
+                          size: Size(14.0, 14.0),
+                          foregroundPainter: new Indicator(
+                              color: status ? Colors.green : Colors.red),
+                        )),
+                    Text(
+                      status ? "ENABLED" : "DISABLED",
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ],
+                ))
           ])),
       Flex(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,

@@ -48,7 +48,7 @@ class _BluetoothState extends State<Bluetooth> {
   void initState() {
     super.initState();
 
-    _flutterBlue.setLogLevel(LogLevel.critical);
+    FlutterBlue.instance.setLogLevel(LogLevel.emergency);
 
     _flutterBlue.state.then((s) {
       setState(() {
