@@ -1,5 +1,6 @@
 import 'package:flutter_blue/flutter_blue.dart';
 import 'package:pool_interface/pool_state.dart';
+import 'package:flutter/material.dart';
 import 'dart:async';
 import 'dart:math';
 import 'dart:typed_data';
@@ -15,6 +16,8 @@ Guid _heaterStatusGuid = Guid("00008276-0000-1000-8000-00805F9B34FB");
 Guid _pumpTimestampGuid = Guid("00008277-0000-1000-8000-00805F9B34FB");
 Guid _heaterTimestampGuid = Guid("00008278-0000-1000-8000-00805F9B34FB");
 Guid _timeGuid = Guid("00008279-0000-1000-8000-00805F9B34FB");
+Guid _pumpOnTimeGuid = Guid("0000827A-0000-1000-8000-00805F9B34FB");
+Guid _pumpOffTimeGuid = Guid("0000827B-0000-1000-8000-00805F9B34FB");
 
 class ControlUnit {
   final BluetoothDevice device;
@@ -74,6 +77,12 @@ class ControlUnit {
           } else if (characteristic.uuid == _heaterTimestampGuid) {
             _subscribe(characteristic,
                 (data) => _state.heaterTimestamp = _parseTimestamp(data));
+          } else if (characteristic.uuid == _pumpOnTimeGuid) {
+            _subscribe(characteristic,
+                (data) => _state.pumpOnTime = _parseTimeOfDay(data));
+          } else if (characteristic.uuid == _pumpOffTimeGuid) {
+            _subscribe(characteristic,
+                (data) => _state.pumpOffTime = _parseTimeOfDay(data));
           }
         });
         _loadInitial();
@@ -89,6 +98,10 @@ class ControlUnit {
       data = await device.readCharacteristic(char);
     }
     return data;
+  }
+
+  _parseTimeOfDay(List<int> data) {
+    return TimeOfDay(hour: data[1], minute: data[0]);
   }
 
   _loadInitial() async {
@@ -118,6 +131,10 @@ class ControlUnit {
         await _getCharacteristic(_characteristics[_pumpTimestampGuid]);
     var heaterTimestampData =
         await _getCharacteristic(_characteristics[_heaterTimestampGuid]);
+    var pumpOnTimeData =
+        await _getCharacteristic(_characteristics[_pumpOnTimeGuid]);
+    var pumpOffTimeData =
+        await _getCharacteristic(_characteristics[_pumpOffTimeGuid]);
 
     _state.airTemp = airTempData[0];
     _state.waterTemp = waterTempData[0];
@@ -128,11 +145,16 @@ class ControlUnit {
     _state.heaterStatus = heaterStatusData[0] == 1;
     _state.pumpTimestamp = _parseTimestamp(pumpTimestampData);
     _state.heaterTimestamp = _parseTimestamp(heaterTimestampData);
+    _state.pumpOnTime = _parseTimeOfDay(pumpOnTimeData);
+    _state.pumpOffTime = _parseTimeOfDay(pumpOffTimeData);
+
+    _streamController.add(_state);
+
     loading = false;
   }
 
-  _subscribe(
-      BluetoothCharacteristic characteristic, void onData(List<int> data)) {
+  _subscribe(BluetoothCharacteristic characteristic,
+      void onData(List<int> data)) async {
     // Make sure characteristic is set to notify.
     device.setNotifyValue(characteristic, true);
 

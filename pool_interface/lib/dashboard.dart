@@ -47,7 +47,10 @@ class Dashboard extends StatelessWidget {
                   controlUnit: controlUnit,
                   poolState: poolState.data,
                 ),
-                ScheduleWidget()
+                ScheduleWidget(
+                  pumpOn: poolState.data.pumpOnTime,
+                  pumpOff: poolState.data.pumpOffTime,
+                )
               ],
             );
           },
@@ -128,19 +131,6 @@ class ControllerStatus extends StatelessWidget {
             ),
             Spacer(),
             Container(
-              padding: EdgeInsets.all(5),
-              width: 80,
-              decoration: BoxDecoration(
-                  color: Theme.of(context).primaryColor,
-                  borderRadius: BorderRadius.all(Radius.circular(4))),
-              child: Text(
-                "${_twoDigits(hours)}:${_twoDigits(minutes)}:${_twoDigits(seconds)}",
-                style: TextStyle(color: Colors.white),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            Spacer(),
-            Container(
                 width: 95,
                 child: Row(
                   children: [
@@ -162,6 +152,18 @@ class ControllerStatus extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         direction: Axis.horizontal,
         children: [
+          Container(
+            padding: EdgeInsets.all(5),
+            width: 80,
+            decoration: BoxDecoration(
+                color: Theme.of(context).primaryColor,
+                borderRadius: BorderRadius.all(Radius.circular(4))),
+            child: Text(
+              "${_twoDigits(hours)}:${_twoDigits(minutes)}:${_twoDigits(seconds)}",
+              style: TextStyle(color: Colors.white),
+              textAlign: TextAlign.center,
+            ),
+          ),
           Text("Enable:"),
           Switch(
             value: enabled,
@@ -272,38 +274,35 @@ class _PoolStatusState extends State<PoolStatus> {
   }
 }
 
-class ScheduleWidget extends StatefulWidget {
-  @override
-  State<StatefulWidget> createState() => _ScheduleWidgetState();
-}
+class ScheduleWidget extends StatelessWidget {
+  ScheduleWidget({this.pumpOn, this.pumpOff});
 
-class _ScheduleWidgetState extends State<ScheduleWidget> {
-  TimeOfDay _pumpOn;
-  TimeOfDay _pumpOff;
+  final TimeOfDay pumpOn;
+  final TimeOfDay pumpOff;
 
   Future<Null> _selectPumpOnTime(BuildContext context) async {
     final TimeOfDay picked = await showTimePicker(
       context: context,
-      initialTime: _pumpOn ?? TimeOfDay.now(),
+      initialTime: pumpOn ?? TimeOfDay.now(),
     );
 
     if (picked != null) {
-      setState(() {
-        _pumpOn = picked;
-      });
+      // setState(() {
+      //   pumpOn = picked;
+      // });
     }
   }
 
   Future<Null> _selectPumpOffTime(BuildContext context) async {
     final TimeOfDay picked = await showTimePicker(
       context: context,
-      initialTime: _pumpOff ?? TimeOfDay.now(),
+      initialTime: pumpOff ?? TimeOfDay.now(),
     );
 
     if (picked != null) {
-      setState(() {
-        _pumpOff = picked;
-      });
+      // setState(() {
+      //   pumpOff = picked;
+      // });
     }
   }
 
@@ -323,7 +322,7 @@ class _ScheduleWidgetState extends State<ScheduleWidget> {
           children: <Widget>[
             Text("Pump On:"),
             Text(
-              _pumpOn == null ? "Not Set" : "${_pumpOn.format(context)}",
+              pumpOn == null ? "Not Set" : "${pumpOn.format(context)}",
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             RaisedButton(
@@ -337,7 +336,7 @@ class _ScheduleWidgetState extends State<ScheduleWidget> {
           children: <Widget>[
             Text("Pump Off:"),
             Text(
-              _pumpOff == null ? "Not Set" : "${_pumpOff.format(context)}",
+              pumpOff == null ? "Not Set" : "${pumpOff.format(context)}",
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             RaisedButton(
