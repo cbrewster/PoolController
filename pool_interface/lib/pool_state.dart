@@ -19,6 +19,10 @@ class PoolState {
   bool heaterManual;
   bool pumpStatus;
   bool heaterStatus;
+  bool pumpAuto;
+  bool heaterAuto;
   TimeOfDay pumpOnTime;
   TimeOfDay pumpOffTime;
+  TimeOfDay heaterOnTime;
+  TimeOfDay heaterOffTime;
 }

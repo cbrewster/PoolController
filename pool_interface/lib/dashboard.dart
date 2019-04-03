@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:pool_interface/indicator.dart';
 import 'package:pool_interface/control_unit.dart';
 import 'package:pool_interface/pool_state.dart';
+import 'package:pool_interface/schedule.dart';
 import 'dart:async';
 
 class Dashboard extends StatelessWidget {
@@ -48,8 +49,8 @@ class Dashboard extends StatelessWidget {
                   poolState: poolState.data,
                 ),
                 ScheduleWidget(
-                  pumpOn: poolState.data.pumpOnTime,
-                  pumpOff: poolState.data.pumpOffTime,
+                  poolState: poolState.data,
+                  controlUnit: controlUnit,
                 )
               ],
             );
@@ -180,48 +181,32 @@ class ControllerStatus extends StatelessWidget {
   }
 }
 
-class PoolStatus extends StatefulWidget {
+class PoolStatus extends StatelessWidget {
   PoolStatus({Key key, this.poolState, this.controlUnit}) : super(key: key);
 
   final PoolState poolState;
   final ControlUnit controlUnit;
 
   @override
-  _PoolStatusState createState() => _PoolStatusState();
-}
-
-class _PoolStatusState extends State<PoolStatus> {
-  bool _pumpAuto = true;
-  bool _heaterAuto = true;
-
-  @override
   Widget build(BuildContext context) {
     return Column(children: [
       ControllerStatus(
-        auto: _pumpAuto,
-        enabled: widget.poolState.pumpManual,
-        status: widget.poolState.pumpStatus,
-        timestamp: widget.poolState.pumpTimestamp,
+        auto: poolState.pumpAuto,
+        enabled: poolState.pumpManual,
+        status: poolState.pumpStatus,
+        timestamp: poolState.pumpTimestamp,
         name: "Water Pump",
-        onStatusChange: (_value) => widget.controlUnit.togglePump(),
-        onModeChange: (value) {
-          setState(() {
-            _pumpAuto = value;
-          });
-        },
+        onStatusChange: (_value) => controlUnit.togglePump(),
+        onModeChange: (_value) => controlUnit.togglePumpAuto(),
       ),
       ControllerStatus(
-        auto: _heaterAuto,
-        enabled: widget.poolState.heaterManual,
-        status: widget.poolState.heaterStatus,
-        timestamp: widget.poolState.heaterTimestamp,
+        auto: poolState.heaterAuto,
+        enabled: poolState.heaterManual,
+        status: poolState.heaterStatus,
+        timestamp: poolState.heaterTimestamp,
         name: "Water Heater",
-        onStatusChange: (_value) => widget.controlUnit.toggleHeater(),
-        onModeChange: (value) {
-          setState(() {
-            _heaterAuto = value;
-          });
-        },
+        onStatusChange: (_value) => controlUnit.toggleHeater(),
+        onModeChange: (_value) => controlUnit.toggleHeaterAuto(),
       ),
       Flexible(
           child: Container(
@@ -240,11 +225,10 @@ class _PoolStatusState extends State<PoolStatus> {
                           children: <Widget>[
                             RaisedButton(
                               child: const Icon(Icons.remove),
-                              onPressed: () =>
-                                  widget.controlUnit.decreaseThermostat(),
+                              onPressed: () => controlUnit.decreaseThermostat(),
                             ),
                             Text(
-                              "${widget.poolState.thermostat} ºF",
+                              "${poolState.thermostat} ºF",
                               style: TextStyle(
                                 fontSize: 40,
                                 fontWeight: FontWeight.bold,
@@ -252,8 +236,7 @@ class _PoolStatusState extends State<PoolStatus> {
                             ),
                             RaisedButton(
                               child: const Icon(Icons.add),
-                              onPressed: () =>
-                                  widget.controlUnit.increaseThermostat(),
+                              onPressed: () => controlUnit.increaseThermostat(),
                             ),
                           ],
                         )),
@@ -261,48 +244,64 @@ class _PoolStatusState extends State<PoolStatus> {
       Flexible(
           child: DataDisplay(
         label: "Water Temperature",
-        value:
-            "${widget.poolState.waterTemp != null ? widget.poolState.waterTemp : "?"} ºF",
+        value: "${poolState.waterTemp != null ? poolState.waterTemp : "?"} ºF",
       )),
       Flexible(
           child: DataDisplay(
         label: "Air Temperature",
-        value:
-            "${widget.poolState.airTemp != null ? widget.poolState.airTemp : "?"} ºF",
+        value: "${poolState.airTemp != null ? poolState.airTemp : "?"} ºF",
       )),
     ]);
   }
 }
 
 class ScheduleWidget extends StatelessWidget {
-  ScheduleWidget({this.pumpOn, this.pumpOff});
+  ScheduleWidget({this.poolState, this.controlUnit});
 
-  final TimeOfDay pumpOn;
-  final TimeOfDay pumpOff;
+  final PoolState poolState;
+  final ControlUnit controlUnit;
 
   Future<Null> _selectPumpOnTime(BuildContext context) async {
     final TimeOfDay picked = await showTimePicker(
       context: context,
-      initialTime: pumpOn ?? TimeOfDay.now(),
+      initialTime: poolState.pumpOnTime ?? TimeOfDay.now(),
     );
 
     if (picked != null) {
-      // setState(() {
-      //   pumpOn = picked;
-      // });
+      controlUnit.setPumpOnTime(picked);
     }
   }
 
   Future<Null> _selectPumpOffTime(BuildContext context) async {
     final TimeOfDay picked = await showTimePicker(
       context: context,
-      initialTime: pumpOff ?? TimeOfDay.now(),
+      initialTime: poolState.pumpOffTime ?? TimeOfDay.now(),
     );
 
     if (picked != null) {
-      // setState(() {
-      //   pumpOff = picked;
-      // });
+      controlUnit.setPumpOffTime(picked);
+    }
+  }
+
+  Future<Null> _selectHeaterOnTime(BuildContext context) async {
+    final TimeOfDay picked = await showTimePicker(
+      context: context,
+      initialTime: poolState.heaterOnTime ?? TimeOfDay.now(),
+    );
+
+    if (picked != null) {
+      controlUnit.setHeaterOnTime(picked);
+    }
+  }
+
+  Future<Null> _selectHeaterOffTime(BuildContext context) async {
+    final TimeOfDay picked = await showTimePicker(
+      context: context,
+      initialTime: poolState.heaterOffTime ?? TimeOfDay.now(),
+    );
+
+    if (picked != null) {
+      controlUnit.setHeaterOffTime(picked);
     }
   }
 
@@ -322,7 +321,9 @@ class ScheduleWidget extends StatelessWidget {
           children: <Widget>[
             Text("Pump On:"),
             Text(
-              pumpOn == null ? "Not Set" : "${pumpOn.format(context)}",
+              poolState.pumpOnTime == null
+                  ? "Not Set"
+                  : "${poolState.pumpOnTime.format(context)}",
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             RaisedButton(
@@ -336,7 +337,9 @@ class ScheduleWidget extends StatelessWidget {
           children: <Widget>[
             Text("Pump Off:"),
             Text(
-              pumpOff == null ? "Not Set" : "${pumpOff.format(context)}",
+              poolState.pumpOffTime == null
+                  ? "Not Set"
+                  : "${poolState.pumpOffTime.format(context)}",
               style: TextStyle(fontWeight: FontWeight.bold),
             ),
             RaisedButton(
@@ -344,7 +347,52 @@ class ScheduleWidget extends StatelessWidget {
               onPressed: () => _selectPumpOffTime(context),
             )
           ],
-        )
+        ),
+        Center(
+            child: new Schedule(
+                onTime: poolState.pumpOnTime, offTime: poolState.pumpOffTime)),
+        Padding(
+            padding: EdgeInsets.all(10),
+            child: Text(
+              "Heater Schedule",
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 24),
+            )),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            Text("Heater On:"),
+            Text(
+              poolState.heaterOnTime == null
+                  ? "Not Set"
+                  : "${poolState.heaterOnTime.format(context)}",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            RaisedButton(
+              child: const Text("Select Time"),
+              onPressed: () => _selectHeaterOnTime(context),
+            )
+          ],
+        ),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+          children: <Widget>[
+            Text("Heater Off:"),
+            Text(
+              poolState.heaterOffTime == null
+                  ? "Not Set"
+                  : "${poolState.heaterOffTime.format(context)}",
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            RaisedButton(
+              child: const Text("Select Time"),
+              onPressed: () => _selectHeaterOffTime(context),
+            )
+          ],
+        ),
+        Center(
+            child: Schedule(
+                onTime: poolState.heaterOnTime,
+                offTime: poolState.heaterOffTime))
       ],
     );
   }

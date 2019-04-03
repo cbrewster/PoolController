@@ -18,6 +18,10 @@ Guid _heaterTimestampGuid = Guid("00008278-0000-1000-8000-00805F9B34FB");
 Guid _timeGuid = Guid("00008279-0000-1000-8000-00805F9B34FB");
 Guid _pumpOnTimeGuid = Guid("0000827A-0000-1000-8000-00805F9B34FB");
 Guid _pumpOffTimeGuid = Guid("0000827B-0000-1000-8000-00805F9B34FB");
+Guid _pumpAutoGuid = Guid("0000827C-0000-1000-8000-00805F9B34FB");
+Guid _heaterAutoGuid = Guid("0000827D-0000-1000-8000-00805F9B34FB");
+Guid _heaterOnTimeGuid = Guid("0000827E-0000-1000-8000-00805F9B34FB");
+Guid _heaterOffTimeGuid = Guid("0000827F-0000-1000-8000-00805F9B34FB");
 
 class ControlUnit {
   final BluetoothDevice device;
@@ -83,13 +87,25 @@ class ControlUnit {
           } else if (characteristic.uuid == _pumpOffTimeGuid) {
             _subscribe(characteristic,
                 (data) => _state.pumpOffTime = _parseTimeOfDay(data));
+          } else if (characteristic.uuid == _pumpAutoGuid) {
+            _subscribe(
+                characteristic, (data) => _state.pumpAuto = data[0] == 1);
+          } else if (characteristic.uuid == _heaterAutoGuid) {
+            _subscribe(
+                characteristic, (data) => _state.heaterAuto = data[0] == 1);
+          } else if (characteristic.uuid == _heaterOnTimeGuid) {
+            _subscribe(characteristic,
+                (data) => _state.heaterOnTime = _parseTimeOfDay(data));
+          } else if (characteristic.uuid == _heaterOffTimeGuid) {
+            _subscribe(characteristic,
+                (data) => _state.heaterOffTime = _parseTimeOfDay(data));
           }
         });
         _loadInitial();
       }
     });
     _updateTimer = Timer.periodic(
-        Duration(seconds: 1), (_) => _streamController.add(_state));
+        Duration(milliseconds: 500), (_) => _streamController.add(_state));
   }
 
   _getCharacteristic(BluetoothCharacteristic char) async {
@@ -135,6 +151,14 @@ class ControlUnit {
         await _getCharacteristic(_characteristics[_pumpOnTimeGuid]);
     var pumpOffTimeData =
         await _getCharacteristic(_characteristics[_pumpOffTimeGuid]);
+    var pumpAutoData =
+        await _getCharacteristic(_characteristics[_pumpAutoGuid]);
+    var heaterAutoData =
+        await _getCharacteristic(_characteristics[_heaterAutoGuid]);
+    var heaterOnTimeData =
+        await _getCharacteristic(_characteristics[_heaterOnTimeGuid]);
+    var heaterOffTimeData =
+        await _getCharacteristic(_characteristics[_heaterOffTimeGuid]);
 
     _state.airTemp = airTempData[0];
     _state.waterTemp = waterTempData[0];
@@ -147,6 +171,10 @@ class ControlUnit {
     _state.heaterTimestamp = _parseTimestamp(heaterTimestampData);
     _state.pumpOnTime = _parseTimeOfDay(pumpOnTimeData);
     _state.pumpOffTime = _parseTimeOfDay(pumpOffTimeData);
+    _state.pumpAuto = pumpAutoData[0] == 1;
+    _state.heaterAuto = heaterAutoData[0] == 1;
+    _state.heaterOnTime = _parseTimeOfDay(heaterOnTimeData);
+    _state.heaterOffTime = _parseTimeOfDay(heaterOffTimeData);
 
     _streamController.add(_state);
 
@@ -164,6 +192,23 @@ class ControlUnit {
       onData(data);
       _streamController.add(_state);
     });
+  }
+
+  void togglePumpAuto() {
+    _state.pumpAuto = !_state.pumpAuto;
+
+    device.writeCharacteristic(
+        _characteristics[_pumpAutoGuid], [_state.pumpAuto ? 1 : 0],
+        type: CharacteristicWriteType.withResponse);
+    _streamController.add(_state);
+  }
+
+  void toggleHeaterAuto() {
+    _state.heaterAuto = !_state.heaterAuto;
+    device.writeCharacteristic(
+        _characteristics[_heaterAutoGuid], [_state.heaterAuto ? 1 : 0],
+        type: CharacteristicWriteType.withResponse);
+    _streamController.add(_state);
   }
 
   void togglePump() {
@@ -195,6 +240,38 @@ class ControlUnit {
     _state.thermostat = min(_state.thermostat + 1, 80);
     device.writeCharacteristic(
         _characteristics[_thermostatGuid], [_state.thermostat],
+        type: CharacteristicWriteType.withResponse);
+    _streamController.add(_state);
+  }
+
+  void setPumpOnTime(TimeOfDay time) {
+    _state.pumpOnTime = time;
+    device.writeCharacteristic(
+        _characteristics[_pumpOnTimeGuid], [time.minute, time.hour],
+        type: CharacteristicWriteType.withResponse);
+    _streamController.add(_state);
+  }
+
+  void setPumpOffTime(TimeOfDay time) {
+    _state.pumpOffTime = time;
+    device.writeCharacteristic(
+        _characteristics[_pumpOffTimeGuid], [time.minute, time.hour],
+        type: CharacteristicWriteType.withResponse);
+    _streamController.add(_state);
+  }
+
+  void setHeaterOnTime(TimeOfDay time) {
+    _state.heaterOnTime = time;
+    device.writeCharacteristic(
+        _characteristics[_heaterOnTimeGuid], [time.minute, time.hour],
+        type: CharacteristicWriteType.withResponse);
+    _streamController.add(_state);
+  }
+
+  void setHeaterOffTime(TimeOfDay time) {
+    _state.heaterOffTime = time;
+    device.writeCharacteristic(
+        _characteristics[_heaterOffTimeGuid], [time.minute, time.hour],
         type: CharacteristicWriteType.withResponse);
     _streamController.add(_state);
   }

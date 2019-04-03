@@ -54,6 +54,10 @@ int32_t pcHeaterTimerstampCharId;
 int32_t pcTimeCharId;
 int32_t pcPumpOnTimeCharId;
 int32_t pcPumpOffTimeCharId;
+int32_t pcPumpAutoCharId;
+int32_t pcHeaterAutoCharId;
+int32_t pcHeaterOnTimeCharId;
+int32_t pcHeaterOffTimeCharId;
 
 // == Globals ==
 int loopTime = 0;
@@ -67,9 +71,14 @@ int pumpOnHour = 8;
 int pumpOnMinute = 0;
 int pumpOffHour = 22;
 int pumpOffMinute = 0;
-
+int heaterOnHour = 8;
+int heaterOnMinute = 0;
+int heaterOffHour = 22;
+int heaterOffMinute = 0;
 bool pumpOn = true;
 bool heaterOn = true;
+bool pumpAuto = false;
+bool heaterAuto = false;
 uint8_t thermostat = 75;
 
 void setup()
@@ -102,7 +111,6 @@ void setupAirTemp()
 {
   if (!airTempSensor.begin(0x18))
   {
-    error(F("Couldn't find MCP9808! Check your connections and verify the address is correct."));
     while (1)
       ;
   }
@@ -134,16 +142,12 @@ void setupRadio()
 
   if (!rf69_manager.init())
   {
-    error(F("RFM69 radio init failed"));
     while (1)
       ;
   }
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM (for low power module)
   // No encryption
-  if (!rf69.setFrequency(RF69_FREQ))
-  {
-    error(F("setFrequency failed"));
-  }
+  rf69.setFrequency(RF69_FREQ);
 
   // If you are using a high power RF69 eg RFM69HW, you *must* set a Tx power with the
   // ishighpowermodule flag set like this:
@@ -153,14 +157,6 @@ void setupRadio()
   uint8_t key[] = {0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
   rf69.setEncryptionKey(key);
-}
-
-// A small helper
-void error(const __FlashStringHelper *err)
-{
-  // Serial.println(err);
-  while (1)
-    ;
 }
 
 void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
@@ -192,13 +188,33 @@ void BleGattRX(int32_t charId, uint8_t data[], uint16_t len)
   }
   else if (charId == pcPumpOnTimeCharId)
   {
-    pumpOnHour = (int)data[0];
-    pumpOnMinute = (int)data[1];
+    pumpOnHour = (int)data[1];
+    pumpOnMinute = (int)data[0];
   }
   else if (charId == pcPumpOffTimeCharId)
   {
-    pumpOffHour = (int)data[0];
-    pumpOffMinute = (int)data[1];
+    pumpOffHour = (int)data[1];
+    pumpOffMinute = (int)data[0];
+  }
+  else if (charId == pcHeaterOnTimeCharId)
+  {
+    heaterOnHour = (int)data[1];
+    heaterOnMinute = (int)data[0];
+  }
+  else if (charId == pcHeaterOffTimeCharId)
+  {
+    heaterOffHour = (int)data[1];
+    heaterOffMinute = (int)data[0];
+  }
+  else if (charId == pcPumpAutoCharId)
+  {
+    pumpAuto = data[0] == 1;
+    updateState();
+  }
+  else if (charId == pcHeaterAutoCharId)
+  {
+    heaterAuto = data[0] == 1;
+    updateState();
   }
 }
 
@@ -206,24 +222,18 @@ void setupBle()
 {
   boolean success;
 
-  if (!ble.begin(false))
-  {
-    error(F("Couldn't find Bluefruit, make sure it's in CoMmanD mode & check wiring?"));
-  }
+  ble.begin(false);
 
   if (FACTORYRESET_ENABLE)
   {
     /* Perform a factory reset to make sure everything is in a known state */
-    if (!ble.factoryReset())
-    {
-      error(F("Couldn't factory reset"));
-    }
+    ble.factoryReset();
   }
 
-  if (!ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION))
-  {
-    error(F("Callback requires at least 0.7.0"));
-  }
+  // if (!ble.isVersionAtLeast(MINIMUM_FIRMWARE_VERSION))
+  // {
+  //   error(F("Callback requires at least 0.7.0"));
+  // }
 
   /* Disable command echo from Bluefruit */
   ble.echo(false);
@@ -232,86 +242,59 @@ void setupBle()
   // ble.info();
 
   /* Change the device name to make it easier to find */
-  if (!ble.sendCommandCheckOK(F("AT+GAPDEVNAME=Pool Control Center")))
-  {
-    error(F("Could not set device name?"));
-  }
+  ble.sendCommandCheckOK(F("AT+GAPDEVNAME=Pool Control Center"));
 
   /* Add the Heart Rate Service definition */
   /* Service ID should be 1 */
   success = ble.sendCommandCheckOK(F("AT+GATTADDSERVICE=UUID=0x308E"));
 
   /* Add the Pool Controller Water Temp characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8270, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcWaterTempCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8270, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcWaterTempCharId);
 
   /* Add the Pool Controller Air Temp characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8271, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcAirTempCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8271, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcAirTempCharId);
 
   /* Add the Pool Controller Pump Manual characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8272, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcPumpManualCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8272, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcPumpManualCharId);
 
   /* Add the Pool Controller Heater Manual characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8273, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcHeaterManualCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8273, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcHeaterManualCharId);
 
   /* Add the Pool Controller Thermostat characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8274, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=75"), &pcThermostatCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8274, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=75"), &pcThermostatCharId);
 
   /* Add the Pool Controller Pump Status characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8275, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcPumpStatusCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8275, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcPumpStatusCharId);
 
   /* Add the Pool Controller Heater Status characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8276, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcHeaterStatusCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8276, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcHeaterStatusCharId);
 
   /* Add the Pool Controller Pump Timestamp characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8277, PROPERTIES=0x12, MIN_LEN=4, MAX_LEN=4"), &pcPumpTimestampCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8277, PROPERTIES=0x12, MIN_LEN=4, MAX_LEN=4"), &pcPumpTimestampCharId);
 
   /* Add the Pool Controller Heater Timestamp characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8278, PROPERTIES=0x12, MIN_LEN=4, MAX_LEN=4"), &pcHeaterTimerstampCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8278, PROPERTIES=0x12, MIN_LEN=4, MAX_LEN=4"), &pcHeaterTimerstampCharId);
 
   /* Add the Pool Controller Current Time characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8279, PROPERTIES=0x1E, MIN_LEN=4, MAX_LEN=4"), &pcTimeCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8279, PROPERTIES=0x1E, MIN_LEN=4, MAX_LEN=4"), &pcTimeCharId);
 
   /* Add the Pool Controller Pump On Time characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x827A, PROPERTIES=0x1E, MIN_LEN=2, MAX_LEN=2"), &pcPumpOnTimeCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x827A, PROPERTIES=0x1E, MIN_LEN=2, MAX_LEN=2"), &pcPumpOnTimeCharId);
 
   /* Add the Pool Controller Pump Off Time characteristic */
-  if (!ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x827B, PROPERTIES=0x1E, MIN_LEN=2, MAX_LEN=2"), &pcPumpOffTimeCharId))
-  {
-    error(F("Could not add pool controller characteristic"));
-  }
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x827B, PROPERTIES=0x1E, MIN_LEN=2, MAX_LEN=2"), &pcPumpOffTimeCharId);
+
+  /* Add the Pool Controller Pump Auto characteristic */
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x827C, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=0"), &pcPumpAutoCharId);
+
+  /* Add the Pool Controller Heater Auto characteristic */
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x827D, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=0"), &pcHeaterAutoCharId);
+
+  /* Add the Pool Controller Heater On Time characteristic */
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x827E, PROPERTIES=0x1E, MIN_LEN=2, MAX_LEN=2"), &pcHeaterOnTimeCharId);
+
+  /* Add the Pool Controller Heater Off Time characteristic */
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x827F, PROPERTIES=0x1E, MIN_LEN=2, MAX_LEN=2"), &pcHeaterOffTimeCharId);
 
   /* Add the Heart Rate Service to the advertising data */
   ble.sendCommandCheckOK(F("AT+GAPSETADVDATA=03-02-8E-30"));
@@ -323,15 +306,21 @@ void setupBle()
   heaterTimestamp = rtc.now().unixtime();
   updateChar(pcPumpTimestampCharId, pumpTimestamp);
   updateChar(pcHeaterTimerstampCharId, heaterTimestamp);
-  updateChar(pcPumpManualCharId, (int32_t)pumpManual);
-  updateChar(pcHeaterManualCharId, (int32_t)heaterManual);
   updateScheduleChar(pcPumpOnTimeCharId, pumpOnHour, pumpOnMinute);
   updateScheduleChar(pcPumpOffTimeCharId, pumpOffHour, pumpOffMinute);
+  updateScheduleChar(pcHeaterOnTimeCharId, heaterOnHour, heaterOnMinute);
+  updateScheduleChar(pcHeaterOffTimeCharId, heaterOffHour, heaterOffMinute);
 
   ble.setBleGattRxCallback(pcPumpManualCharId, BleGattRX);
   ble.setBleGattRxCallback(pcHeaterManualCharId, BleGattRX);
   ble.setBleGattRxCallback(pcThermostatCharId, BleGattRX);
   ble.setBleGattRxCallback(pcTimeCharId, BleGattRX);
+  ble.setBleGattRxCallback(pcPumpOnTimeCharId, BleGattRX);
+  ble.setBleGattRxCallback(pcPumpOffTimeCharId, BleGattRX);
+  ble.setBleGattRxCallback(pcHeaterOnTimeCharId, BleGattRX);
+  ble.setBleGattRxCallback(pcHeaterOffTimeCharId, BleGattRX);
+  ble.setBleGattRxCallback(pcPumpAutoCharId, BleGattRX);
+  ble.setBleGattRxCallback(pcHeaterAutoCharId, BleGattRX);
 }
 
 void getAirTemp()
@@ -346,24 +335,17 @@ void updateChar(int32_t charId, int32_t value)
   ble.print(F(","));
   ble.println(value);
 
-  if (!ble.waitForOK())
-  {
-    error(F("Failed to get response!"));
-  }
+  ble.waitForOK();
 }
 
 void updateScheduleChar(int32_t charId, int hour, int minute)
 {
   char buffer[22];
   sprintf(buffer, "AT+GATTCHAR=%d,%02x-%02x", charId, hour, minute);
-  Serial.println(buffer);
 
   ble.println(buffer);
 
-  if (!ble.waitForOK())
-  {
-    error(F("Failed to get response!"));
-  }
+  ble.waitForOK();
 }
 
 void sendData()
@@ -372,25 +354,78 @@ void sendData()
   updateChar(pcAirTempCharId, (int32_t)airTemp);
 }
 
+bool timeIsAfter(DateTime t, int hour, int minute)
+{
+  int minutes = hour * 60 + minute;
+  // Adjust for time zone!
+  int timeInMinutes = ((t.hour() + 19) % 24) * 60 + t.minute();
+  return timeInMinutes >= minutes;
+}
+
+bool timeIsBefore(DateTime t, int hour, int minute)
+{
+  int minutes = hour * 60 + minute;
+  // Adjust for time zone!
+  int timeInMinutes = ((t.hour() + 19) % 24) * 60 + t.minute();
+  return timeInMinutes < minutes;
+}
+
 void updateState()
 {
   bool oldPumpOn = pumpOn;
   bool oldHeaterOn = heaterOn;
 
+  bool pumpOnAuto = false;
+  bool heaterOnAuto = false;
+
+  if (pumpAuto)
+  {
+    DateTime now = rtc.now();
+    int timeOn = pumpOnHour * 60 + pumpOnMinute;
+    int timeOff = pumpOffHour * 60 + pumpOffMinute;
+
+    if (timeOn < timeOff)
+    {
+      pumpOnAuto = timeIsAfter(now, pumpOnHour, pumpOnMinute) && timeIsBefore(now, pumpOffHour, pumpOffMinute);
+    }
+    else if (timeOn > timeOff)
+    {
+      pumpOnAuto = timeIsAfter(now, pumpOnHour, pumpOnMinute) || timeIsBefore(now, pumpOffHour, pumpOffMinute);
+    }
+  }
+
+  if (heaterAuto)
+  {
+    DateTime now = rtc.now();
+    int timeOn = heaterOnHour * 60 + heaterOnMinute;
+    int timeOff = heaterOffHour * 60 + heaterOffMinute;
+
+    if (timeOn < timeOff)
+    {
+      heaterOnAuto = timeIsAfter(now, heaterOnHour, heaterOnMinute) && timeIsBefore(now, heaterOffHour, heaterOffMinute);
+    }
+    else if (timeOn > timeOff)
+    {
+      heaterOnAuto = timeIsAfter(now, heaterOnHour, heaterOnMinute) || timeIsBefore(now, heaterOffHour, heaterOffMinute);
+    }
+  }
+
+  bool heaterEnabled = (!heaterAuto && heaterManual) || (heaterAuto && heaterOnAuto);
+
   if (heaterOn)
   {
     // If the heater has been on, wait to heat until the thermostat temperature is met.
-    heaterOn = heaterManual && (waterTemp < thermostat);
+    heaterOn = heaterEnabled && (waterTemp < thermostat);
   }
   else
   {
     // If the heater has been off, wait until we are at least 2 degrees below the set temperature
     // to turn back on.
-    heaterOn = heaterManual && (waterTemp < thermostat - 1);
+    heaterOn = heaterEnabled && (waterTemp < thermostat - 1);
   }
 
   // Pump will be on if the manual control is set or if the heater is enabled.
-  pumpOn = pumpManual || heaterOn;
+  pumpOn = (!pumpAuto && pumpManual) || (pumpAuto && pumpOnAuto) || heaterOn;
 
   // Check if state changed
   if (oldPumpOn != pumpOn)
@@ -398,6 +433,8 @@ void updateState()
     pumpTimestamp = rtc.now().unixtime();
     updateChar(pcPumpTimestampCharId, pumpTimestamp);
     updateChar(pcPumpStatusCharId, (int32_t)pumpOn);
+
+    digitalWrite(PUMP_RELAY, pumpOn);
   }
 
   // Check if state changed
@@ -406,10 +443,9 @@ void updateState()
     heaterTimestamp = rtc.now().unixtime();
     updateChar(pcHeaterTimerstampCharId, heaterTimestamp);
     updateChar(pcHeaterStatusCharId, (int32_t)heaterOn);
-  }
 
-  digitalWrite(PUMP_RELAY, pumpOn);
-  digitalWrite(HEATER_RELAY, heaterOn);
+    digitalWrite(HEATER_RELAY, heaterOn);
+  }
 }
 
 uint8_t data[] = "ack";
@@ -424,7 +460,6 @@ void loop()
     uint8_t from;
     if (rf69_manager.recvfromAck(buf, &len, &from))
     {
-      Serial.println("Receiving...");
       buf[len] = 0; // zero out remaining string
 
       memcpy((uint8_t *)&waterTemp, buf, 4);
@@ -432,15 +467,14 @@ void loop()
       updateState();
       sendData();
 
-      Serial.println("Sending Ack...");
       // Send a reply back to the originator client
-      if (!rf69_manager.sendtoWait(data, sizeof(data), from))
-        error(F("Sending failed (no ack)"));
-      Serial.println("Done...");
+      rf69_manager.sendtoWait(data, sizeof(data), from);
     }
   }
 
   // Must call update to process the Rx callbacks.
   ble.update(200);
+
+  updateState();
   delay(1);
 }
