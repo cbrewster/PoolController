@@ -237,7 +237,7 @@ class ControlUnit {
   }
 
   void increaseThermostat() {
-    _state.thermostat = min(_state.thermostat + 1, 80);
+    _state.thermostat = min(_state.thermostat + 1, 104);
     device.writeCharacteristic(
         _characteristics[_thermostatGuid], [_state.thermostat],
         type: CharacteristicWriteType.withResponse);
