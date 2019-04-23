@@ -63,8 +63,8 @@ int32_t pcHeaterOffTimeCharId;
 int loopTime = 0;
 float waterTemp = 0;
 float airTemp = 0;
-bool pumpManual = true;
-bool heaterManual = true;
+bool pumpManual = false;
+bool heaterManual = false;
 int32_t pumpTimestamp;
 int32_t heaterTimestamp;
 int pumpOnHour = 8;
@@ -75,8 +75,8 @@ int heaterOnHour = 8;
 int heaterOnMinute = 0;
 int heaterOffHour = 22;
 int heaterOffMinute = 0;
-bool pumpOn = true;
-bool heaterOn = true;
+bool pumpOn = false;
+bool heaterOn = false;
 bool pumpAuto = false;
 bool heaterAuto = false;
 uint8_t thermostat = 75;
@@ -255,19 +255,19 @@ void setupBle()
   ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8271, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1"), &pcAirTempCharId);
 
   /* Add the Pool Controller Pump Manual characteristic */
-  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8272, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcPumpManualCharId);
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8272, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=0"), &pcPumpManualCharId);
 
   /* Add the Pool Controller Heater Manual characteristic */
-  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8273, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcHeaterManualCharId);
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8273, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=0"), &pcHeaterManualCharId);
 
   /* Add the Pool Controller Thermostat characteristic */
   ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8274, PROPERTIES=0x1E, MIN_LEN=1, MAX_LEN=1, VALUE=75"), &pcThermostatCharId);
 
   /* Add the Pool Controller Pump Status characteristic */
-  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8275, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcPumpStatusCharId);
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8275, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1, VALUE=0"), &pcPumpStatusCharId);
 
   /* Add the Pool Controller Heater Status characteristic */
-  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8276, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1, VALUE=1"), &pcHeaterStatusCharId);
+  ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8276, PROPERTIES=0x12, MIN_LEN=1, MAX_LEN=1, VALUE=0"), &pcHeaterStatusCharId);
 
   /* Add the Pool Controller Pump Timestamp characteristic */
   ble.sendCommandWithIntReply(F("AT+GATTADDCHAR=UUID=0x8277, PROPERTIES=0x12, MIN_LEN=4, MAX_LEN=4"), &pcPumpTimestampCharId);

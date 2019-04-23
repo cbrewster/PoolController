@@ -54,6 +54,9 @@ class _BluetoothState extends State<Bluetooth> {
       setState(() {
         state = s;
       });
+      if (state == BluetoothState.on) {
+        _startScan();
+      }
     });
 
     _stateSubscription = _flutterBlue.onStateChanged().listen((s) {
@@ -61,8 +64,6 @@ class _BluetoothState extends State<Bluetooth> {
         state = s;
       });
     });
-
-    _startScan();
   }
 
   @override
