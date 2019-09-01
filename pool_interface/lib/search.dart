@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_blue/flutter_blue.dart';
+import 'package:pool_interface/controller.dart';
 import 'dart:async';
 
 class Search extends StatefulWidget {
@@ -9,6 +10,10 @@ class Search extends StatefulWidget {
 
   @override
   State<StatefulWidget> createState() => _SearchState();
+}
+
+abstract class CharacteristicCallback {
+  void callback(List<int> data);
 }
 
 class _SearchState extends State<Search> {
@@ -32,6 +37,9 @@ class _SearchState extends State<Search> {
   Map<Guid, StreamSubscription> valueChangedSubscriptions = {};
   BluetoothDeviceState deviceState = BluetoothDeviceState.disconnected;
 
+  // Pool Info
+  PoolInfo _poolInfo = PoolInfo();
+
   @override
   void initState() {
     super.initState();
@@ -46,6 +54,8 @@ class _SearchState extends State<Search> {
         state = s;
       });
     });
+
+    _startScan();
   }
 
   @override
@@ -63,7 +73,7 @@ class _SearchState extends State<Search> {
     _scanSubscription = _flutterBlue.scan(
         timeout: const Duration(seconds: 5),
         withServices: [
-          new Guid('038b56ff-c3e6-4ff7-ab2d-f5884bc953bc')
+          new Guid('0000308E-0000-1000-8000-00805F9B34FB')
         ]).listen((scanResult) {
       print('localName: ${scanResult.advertisementData.localName}');
       setState(() {
@@ -105,6 +115,16 @@ class _SearchState extends State<Search> {
         device.discoverServices().then((s) {
           setState(() {
             services = s;
+            services.forEach((s) {
+              print("Char ${s.characteristics.map((c) {
+                return c.uuid;
+              })}");
+            });
+          });
+          var poolService = services.firstWhere(
+              (s) => s.uuid == Guid("0000308e-0000-1000-8000-00805f9b34fb"));
+          poolService?.characteristics?.forEach((c) {
+            _setNotification(c);
           });
         });
       }
@@ -154,8 +174,17 @@ class _SearchState extends State<Search> {
 
       final sub = device.onValueChanged(c).listen((d) {
         setState(() {
-          print('onValueChanged $d');
+          print("Update: $d");
         });
+        if (c.uuid == Guid("00008270-0000-1000-8000-00805f9b34fb")) {
+          setState(() {
+            _poolInfo.waterTemp = d[0];
+          });
+        } else if (c.uuid == Guid("00008271-0000-1000-8000-00805f9b34fb")) {
+          setState(() {
+            _poolInfo.airTemp = d[0];
+          });
+        }
       });
 
       valueChangedSubscriptions[c.uuid] = sub;
@@ -190,30 +219,59 @@ class _SearchState extends State<Search> {
     }
   }
 
-  // _buildScanResultTiles() {
-  //   return scanResults.values
-  //       .map((r) => ScanResultTile(result: r, onTap: () => _connect(r.device)))
-  //       .toList();
-  // }
+  Widget _loading(BuildContext context) {
+    return Scaffold(
+        appBar: new AppBar(
+          title: Text(widget.title),
+        ),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ));
+  }
+
+  Widget _search(BuildContext context) {
+    return Scaffold(
+        appBar: new AppBar(
+          title: Text(widget.title),
+        ),
+        body: ListView(
+          children: scanResults.values.map((result) {
+            return Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(result.device.name.isEmpty
+                      ? "Unamed"
+                      : result.device.name),
+                  RaisedButton(
+                    child: Text("Connect"),
+                    onPressed: () {
+                      _connect(result.device);
+                    },
+                  )
+                ]);
+          }).toList(),
+        ),
+        floatingActionButton: _buildScanningButton());
+  }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: new AppBar(
-        title: Text(widget.title),
-      ),
-      body: ListView(
-        children: scanResults.values.map((result) {
-          return Text(
-              result.device.name.isEmpty ? "Unamed" : result.device.name);
-        }).toList(),
-      ),
-      floatingActionButton: FloatingActionButton(
-        child: Icon(Icons.search),
-        onPressed: () {
-          _startScan();
-        },
-      ),
-    );
+    switch (deviceState) {
+      case BluetoothDeviceState.connected:
+        {
+          return PoolController(
+            poolInfo: _poolInfo,
+          );
+        }
+      case BluetoothDeviceState.connecting:
+        {
+          return _loading(context);
+        }
+
+      default:
+        {
+          return _search(context);
+        }
+    }
   }
 }
